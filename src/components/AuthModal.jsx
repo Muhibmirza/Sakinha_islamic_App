@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { X, Mail, Lock, User, Chrome } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+
+const authRedirectUrl = import.meta.env.PROD
+  ? "https://sakinah-islamic.vercel.app/?view=profile"
+  : `${window.location.origin}/?view=profile`;
 export default function AuthModal({ close, initialMode = "login" }) {
   const [mode, setMode] = useState(initialMode),
     [name, setName] = useState(""),
@@ -19,11 +23,11 @@ export default function AuthModal({ close, initialMode = "login" }) {
       ({ error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name }, emailRedirectTo: location.origin },
+        options: { data: { name }, emailRedirectTo: authRedirectUrl },
       }));
     else if (mode === "reset")
       ({ error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: location.origin + "/?view=profile",
+        redirectTo: authRedirectUrl,
       }));
     else
       ({ error } = await supabase.auth.signInWithPassword({ email, password }));
@@ -42,7 +46,7 @@ export default function AuthModal({ close, initialMode = "login" }) {
       return setMessage("Supabase credentials are not configured yet.");
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: location.origin + "/?view=profile" },
+      options: { redirectTo: authRedirectUrl },
     });
   };
   return (

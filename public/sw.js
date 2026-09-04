@@ -1,4 +1,4 @@
-const CACHE='sakinah-v4'; const CORE=['/','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
+const CACHE='sakinah-v5'; const CORE=['/','/manifest.webmanifest','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE))));
 self.addEventListener('message',e=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting()});
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(list=>list[0]?list[0].focus():clients.openWindow('/?view=prayer')))});
