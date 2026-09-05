@@ -249,41 +249,143 @@ function Header({ title, back, onBack, dark, setDark, user, onProfile }) {
     </header>
   );
 }
-function Countdown() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const x = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(x);
+const PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+const PRAYER_LABELS = {
+  Fajr: "Dawn",
+  Dhuhr: "Noon",
+  Asr: "Afternoon",
+  Maghrib: "Sunset",
+  Isha: "Night",
+};
+function cleanPrayerTime(value) {
+  return value?.match(/\d{1,2}:\d{2}/)?.[0] || "";
+}
+function prayerMoment(name, time, baseDate = new Date()) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const result = new Date(baseDate);
+  result.setHours(hours, minutes, 0, 0);
+  return { name, time, date: result };
+}
+function getNextPrayer(timings, now = new Date()) {
+  if (!timings) return null;
+  for (const name of PRAYER_NAMES) {
+    const time = cleanPrayerTime(timings[name]);
+    if (!time) continue;
+    const prayer = prayerMoment(name, time, now);
+    if (prayer.date > now) return prayer;
+  }
+  const fajr = cleanPrayerTime(timings.Fajr);
+  if (!fajr) return null;
+  const next = prayerMoment("Fajr", fajr, now);
+  next.date.setDate(next.date.getDate() + 1);
+  return next;
+}
+function useLivePrayerData() {
+  const [state, setState] = useState({
+    data: null,
+    coords: null,
+    loading: true,
+    error: "",
+  });
+  const refresh = React.useCallback(() => {
+    if (!navigator.geolocation) {
+      setState((current) => ({
+        ...current,
+        loading: false,
+        error: "Location is not supported on this device.",
+      }));
+      return;
+    }
+    setState((current) => ({ ...current, loading: true, error: "" }));
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const point = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          };
+          const data = await getPrayerTimes(
+            point.latitude,
+            point.longitude,
+            new Date(),
+          );
+          setState({ data, coords: point, loading: false, error: "" });
+        } catch (error) {
+          setState((current) => ({
+            ...current,
+            loading: false,
+            error: error.message,
+          }));
+        }
+      },
+      () =>
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: "Allow location access for accurate local prayer times.",
+        })),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+    );
   }, []);
-  const now = new Date();
-  const target = new Date();
-  target.setHours(16, 41, 0, 0);
-  if (target < now) target.setDate(target.getDate() + 1);
-  const d = target - now;
-  const h = Math.floor(d / 36e5),
-    m = Math.floor((d % 36e5) / 6e4),
-    s = Math.floor((d % 6e4) / 1000);
+  useEffect(() => {
+    refresh();
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = setInterval(refresh, 15 * 60 * 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      clearInterval(timer);
+    };
+  }, [refresh]);
+  return { ...state, refresh };
+}
+
+function Countdown({ target }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  if (!target) return <b>--:--:--</b>;
+  const difference = Math.max(0, target.getTime() - now.getTime());
+  const hours = Math.floor(difference / 36e5);
+  const minutes = Math.floor((difference % 36e5) / 6e4);
+  const seconds = Math.floor((difference % 6e4) / 1000);
   return (
     <b>
-      {String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}:
-      {String(s).padStart(2, "0")}
+      {String(hours).padStart(2, "0")}:{String(minutes).padStart(2, "0")}:
+      {String(seconds).padStart(2, "0")}
     </b>
   );
 }
-function HomeView({ go, user }) {
+function HomeView({ go, user, prayerData }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const today = new Intl.DateTimeFormat(undefined, {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date());
+  }).format(now);
+  const nextPrayer = getNextPrayer(prayerData.data?.timings, now);
+  const greeting =
+    now.getHours() < 12
+      ? "Good morning"
+      : now.getHours() < 17
+        ? "Good afternoon"
+        : "Good evening";
   return (
     <>
       <section className="greeting">
         <div>
           <span>Assalamu Alaikum</span>
           <h1>
-            Good morning
+            {greeting}
             {user?.user_metadata?.name
               ? `, ${user.user_metadata.name.split(" ")[0]}`
               : ""}
@@ -299,7 +401,11 @@ function HomeView({ go, user }) {
       <section className="prayer-hero">
         <div className="prayer-top">
           <span>
-            <MapPin size={15} /> Karachi, Pakistan
+            <MapPin size={15} />{" "}
+            {prayerData.data?.meta?.timezone ||
+              (prayerData.loading
+                ? "Finding your location..."
+                : "Location needed")}
           </span>
           <span className="live">
             <i /> LIVE
@@ -308,22 +414,29 @@ function HomeView({ go, user }) {
         <div className="prayer-main">
           <div>
             <small>NEXT PRAYER</small>
-            <h2>
-              Asr <em>العصر</em>
-            </h2>
-            <p>Begins at 4:41 PM</p>
+            <h2>{nextPrayer?.name || "Waiting for location"}</h2>
+            <p>
+              {nextPrayer
+                ? `Begins at ${nextPrayer.date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                : prayerData.error || "Calculating today's prayer times..."}
+            </p>
           </div>
           <div className="countdown">
-            <Countdown />
+            <Countdown target={nextPrayer?.date} />
             <span>remaining</span>
           </div>
         </div>
         <div className="prayer-line" />
         <div className="prayer-mini">
-          {prayers.map((p, i) => (
-            <div className={i === 3 ? "active" : ""} key={p[0]}>
-              <span>{p[0]}</span>
-              <b>{p[1]}</b>
+          {PRAYER_NAMES.map((name) => (
+            <div
+              className={nextPrayer?.name === name ? "active" : ""}
+              key={name}
+            >
+              <span>{name}</span>
+              <b>
+                {cleanPrayerTime(prayerData.data?.timings?.[name]) || "--:--"}
+              </b>
             </div>
           ))}
         </div>
@@ -627,82 +740,51 @@ function TasbeehView({ user }) {
     </>
   );
 }
-function PrayerView() {
-  const [city, setCity] = useStored("city", "Your current location"),
-    [notice, setNotice] = useState(""),
-    [live, setLive] = useState(null),
-    [loading, setLoading] = useState(false),
-    [enabled, setEnabled] = useStored("prayer-enabled", {
-      Fajr: true,
-      Dhuhr: true,
-      Asr: true,
-      Maghrib: true,
-      Isha: true,
-    });
-  const locate = () => {
-    setLoading(true);
-    navigator.geolocation?.getCurrentPosition(
-      async (p) => {
-        try {
-          const d = await getPrayerTimes(p.coords.latitude, p.coords.longitude);
-          setLive(d);
-          setCity(d.meta?.timezone || "Current location");
-          const times = Object.fromEntries(
-            ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((name) => [
-              name,
-              d.timings[name].slice(0, 5),
-            ]),
-          );
-          localStorage.setItem(
-            "prayer-reminder-settings",
-            JSON.stringify({ times, enabled }),
-          );
-          window.dispatchEvent(new Event("sakinah-prayers-updated"));
-          setNotice("Accurate times updated for your location");
-        } catch (e) {
-          setNotice(e.message);
-        } finally {
-          setLoading(false);
-        }
-      },
-      () => {
-        setLoading(false);
-        setNotice("Allow location access to calculate local prayer times");
-      },
-      { enableHighAccuracy: true, timeout: 12000 },
-    );
-  };
-  useEffect(locate, []);
-  const rows = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"].map((name, i) => [
+function PrayerView({ prayerData }) {
+  const [notice, setNotice] = useState("");
+  const [enabled, setEnabled] = useStored("prayer-enabled", {
+    Fajr: true,
+    Dhuhr: true,
+    Asr: true,
+    Maghrib: true,
+    Isha: true,
+  });
+  const rows = PRAYER_NAMES.map((name) => [
     name,
-    live?.timings?.[name] || prayers[i][1],
-    prayers[i][2],
+    cleanPrayerTime(prayerData.data?.timings?.[name]),
+    PRAYER_LABELS[name],
   ]);
+
+  useEffect(() => {
+    if (!prayerData.data) return;
+    const times = Object.fromEntries(rows.map(([name, time]) => [name, time]));
+    localStorage.setItem(
+      "prayer-reminder-settings",
+      JSON.stringify({ times, enabled }),
+    );
+    window.dispatchEvent(new Event("sakinah-prayers-updated"));
+  }, [prayerData.data, enabled]);
+
   const notify = async () => {
     if (!("Notification" in window))
       return setNotice("Notifications are not supported here");
-    const r = await Notification.requestPermission();
-    if (r === "granted") {
-      const times = Object.fromEntries(
-        rows.map((x) => [x[0], x[1].slice(0, 5)]),
-      );
-      localStorage.setItem(
-        "prayer-reminder-settings",
-        JSON.stringify({ times, enabled }),
-      );
-      window.dispatchEvent(new Event("sakinah-prayers-updated"));
+    if (!prayerData.data)
+      return setNotice("Allow location first so reminders use accurate times.");
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
       const registration = await navigator.serviceWorker?.ready;
       registration?.showNotification("Sakinah prayer reminders enabled", {
-        body: "We will remind you at your selected prayer times while the app can run.",
+        body: "Your selected prayer reminders now use today's local times.",
         icon: "/icons/icon-192.png",
       });
     }
     setNotice(
-      r === "granted"
-        ? "Prayer reminders enabled while Sakinah is active"
+      permission === "granted"
+        ? "Prayer reminders enabled for today's local times"
         : "Notifications were not enabled",
     );
   };
+
   return (
     <>
       <HeroTitle eyebrow="SALAH" title="Pause. Pray. Be present." />
@@ -710,44 +792,38 @@ function PrayerView() {
         <MapPin />
         <div>
           <small>PRAYER TIMES FOR</small>
-          <input value={city} onChange={(e) => setCity(e.target.value)} />
+          <b>{prayerData.data?.meta?.timezone || "Your current location"}</b>
         </div>
-        <button onClick={locate}>
-          <Navigation /> {loading ? "Locating…" : "Locate"}
+        <button onClick={prayerData.refresh} disabled={prayerData.loading}>
+          <Navigation /> {prayerData.loading ? "Locating..." : "Refresh"}
         </button>
       </section>
-      {notice && (
+      {(notice || prayerData.error) && (
         <div className="toast">
           <Check />
-          {notice}
+          {notice || prayerData.error}
         </div>
       )}
       <div className="prayer-list">
-        {rows.map((p, i) => (
-          <div key={p[0]}>
+        {rows.map((prayer, index) => (
+          <div key={prayer[0]}>
             <span className="pray-icon">
-              {i === 0 ? <Moon /> : i === 3 ? <Sun /> : <Clock3 />}
+              {index === 0 ? <Moon /> : index === 3 ? <Sun /> : <Clock3 />}
             </span>
             <div>
-              <b>{p[0]}</b>
-              <small>{p[2]}</small>
+              <b>{prayer[0]}</b>
+              <small>{prayer[2]}</small>
             </div>
-            <strong>{p[1]}</strong>
+            <strong>{prayer[1] || "--:--"}</strong>
             <button
-              className={`reminder-toggle ${enabled[p[0]] ? "on" : ""}`}
-              aria-label={`${p[0]} reminder`}
-              onClick={() => {
-                const next = { ...enabled, [p[0]]: !enabled[p[0]] };
-                setEnabled(next);
-                const times = Object.fromEntries(
-                  rows.map((x) => [x[0], x[1].slice(0, 5)]),
-                );
-                localStorage.setItem(
-                  "prayer-reminder-settings",
-                  JSON.stringify({ times, enabled: next }),
-                );
-                window.dispatchEvent(new Event("sakinah-prayers-updated"));
-              }}
+              className={`reminder-toggle ${enabled[prayer[0]] ? "on" : ""}`}
+              aria-label={`${prayer[0]} reminder`}
+              onClick={() =>
+                setEnabled((current) => ({
+                  ...current,
+                  [prayer[0]]: !current[prayer[0]],
+                }))
+              }
             >
               <Bell />
             </button>
@@ -758,34 +834,60 @@ function PrayerView() {
         <Bell /> Enable prayer reminders
       </button>
       <p className="note">
-        Times come from AlAdhan using your coordinates, local timezone and
-        Muslim World League calculation method.
+        Times refresh from AlAdhan using your live coordinates and current date.
+        Muslim World League calculation method is selected.
       </p>
     </>
   );
 }
-function QiblaView() {
-  const [heading, setHeading] = useState(0),
-    [qibla, setQibla] = useState(267),
-    [place, setPlace] = useState("your location");
+
+function QiblaView({ prayerData }) {
+  const [heading, setHeading] = useState(0);
+  const [motionNotice, setMotionNotice] = useState("");
+  const qibla = prayerData.coords
+    ? qiblaBearing(prayerData.coords.latitude, prayerData.coords.longitude)
+    : null;
+
+  const enableCompass = async () => {
+    try {
+      if (
+        typeof window.DeviceOrientationEvent?.requestPermission === "function"
+      ) {
+        const permission =
+          await window.DeviceOrientationEvent.requestPermission();
+        setMotionNotice(
+          permission === "granted" ? "Compass enabled" : "Motion access denied",
+        );
+      } else {
+        setMotionNotice("Compass is active when supported by your device.");
+      }
+    } catch {
+      setMotionNotice("Allow motion access in your browser settings.");
+    }
+  };
+
   useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((p) => {
-      setQibla(qiblaBearing(p.coords.latitude, p.coords.longitude));
-      setPlace(
-        `${p.coords.latitude.toFixed(2)}°, ${p.coords.longitude.toFixed(2)}°`,
-      );
-    });
-    const fn = (e) =>
+    const updateHeading = (event) =>
       setHeading(
-        e.webkitCompassHeading ?? (e.alpha == null ? 0 : 360 - e.alpha),
+        event.webkitCompassHeading ??
+          (event.alpha == null ? 0 : 360 - event.alpha),
       );
-    window.addEventListener("deviceorientationabsolute", fn, true);
-    window.addEventListener("deviceorientation", fn, true);
+    window.addEventListener("deviceorientationabsolute", updateHeading, true);
+    window.addEventListener("deviceorientation", updateHeading, true);
     return () => {
-      window.removeEventListener("deviceorientationabsolute", fn, true);
-      window.removeEventListener("deviceorientation", fn, true);
+      window.removeEventListener(
+        "deviceorientationabsolute",
+        updateHeading,
+        true,
+      );
+      window.removeEventListener("deviceorientation", updateHeading, true);
     };
   }, []);
+
+  const place = prayerData.coords
+    ? `${prayerData.coords.latitude.toFixed(4)} degrees, ${prayerData.coords.longitude.toFixed(4)} degrees`
+    : "your live location";
+
   return (
     <>
       <HeroTitle eyebrow="DIRECTION" title="Turn your heart home." />
@@ -798,19 +900,31 @@ function QiblaView() {
           <span className="east">E</span>
           <span className="south">S</span>
           <span className="west">W</span>
-          <div className="needle" style={{ transform: `rotate(${qibla}deg)` }}>
+          <div
+            className="needle"
+            style={{ transform: `rotate(${qibla || 0}deg)` }}
+          >
             <Navigation />
           </div>
-          <div className="kaaba">◆</div>
+          <div className="kaaba">KAABA</div>
         </div>
-        <h2>{Math.round(qibla)}°</h2>
-        <p>Qibla direction from {place}</p>
+        <h2>{qibla == null ? "--" : Math.round(qibla)} degrees</h2>
+        <p>
+          {prayerData.error ||
+            (prayerData.loading
+              ? "Getting your precise location&"
+              : `Qibla direction from ${place}`)}
+        </p>
+        <button className="primary-btn" onClick={enableCompass}>
+          <Compass /> Enable live compass
+        </button>
+        {motionNotice && <small>{motionNotice}</small>}
       </section>
       <div className="tip">
         <Compass />
         <span>
           <b>For best accuracy</b>Calibrate your phone in a figure-eight and
-          allow motion/orientation access on iOS.
+          allow location and motion access.
         </span>
       </div>
     </>
@@ -1449,6 +1563,7 @@ function App() {
     [dark, setDark] = useStored("dark-mode", params.get("theme") === "dark"),
     [install, setInstall] = useState(null),
     [user, setUser] = useState(null),
+    [authReady, setAuthReady] = useState(!supabase),
     [authOpen, setAuthOpen] = useState(false),
     [authMode, setAuthMode] = useState("login"),
     [updateAvailable, setUpdateAvailable] = useState(false),
@@ -1465,18 +1580,27 @@ function App() {
         sessionStorage.getItem("sakinah-install-dismissed") !== "1",
     );
   usePrayerScheduler();
+  const prayerData = useLivePrayerData();
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth
-      .getSession()
-      .then(({ data }) => setUser(data.session?.user || null));
-    const { data } = supabase.auth.onAuthStateChange((_e, s) =>
-      setUser(s?.user || null),
-    );
-    return () => data.subscription.unsubscribe();
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setUser(data.session?.user || null);
+      setAuthReady(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setUser(session?.user || null);
+      setAuthReady(true);
+    });
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
   useEffect(() => {
     const ready = () => setUpdateAvailable(true);
@@ -1510,13 +1634,13 @@ function App() {
     ({
       quran: <QuranExperience user={user} />,
       tasbeeh: <TasbeehView user={user} />,
-      prayer: <PrayerView />,
-      qibla: <QiblaView />,
+      prayer: <PrayerView prayerData={prayerData} />,
+      qibla: <QiblaView prayerData={prayerData} />,
       library: <LibraryView />,
       hadith: <HadithView user={user} />,
       calendar: <CalendarView />,
       profile: <ProfileView user={user} openAuth={() => setAuthOpen(true)} />,
-    })[view] || <HomeView go={go} user={user} />;
+    })[view] || <HomeView go={go} user={user} prayerData={prayerData} />;
   return (
     <div className="app">
       <Header
@@ -1600,7 +1724,7 @@ function App() {
           }}
         />
       )}
-      {!showInstallGate && showOnboarding && !user && (
+      {authReady && !showInstallGate && showOnboarding && !user && (
         <Onboarding
           onLogin={() => {
             setAuthMode("login");

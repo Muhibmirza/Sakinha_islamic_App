@@ -15,6 +15,7 @@ export async function getPrayerTimes(latitude, longitude, date = new Date()) {
   const stamp = `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
   const r = await fetch(
     `https://api.aladhan.com/v1/timings/${stamp}?latitude=${latitude}&longitude=${longitude}&method=1`,
+    { cache: "no-store" },
   );
   if (!r.ok) throw new Error("Prayer service unavailable");
   return (await r.json()).data;
