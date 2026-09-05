@@ -1747,6 +1747,7 @@ function App() {
     [install, setInstall] = useState(null),
     [user, setUser] = useState(null),
     [authReady, setAuthReady] = useState(!supabase),
+    [profileReady, setProfileReady] = useState(!supabase),
     [authOpen, setAuthOpen] = useState(false),
     [authMode, setAuthMode] = useState("login"),
     [updateAvailable, setUpdateAvailable] = useState(false),
@@ -1791,15 +1792,31 @@ function App() {
     return () => window.removeEventListener("sakinah-signout", signOut);
   }, []);
   useEffect(() => {
-    if (!user || !supabase) return;
-    supabase.from("profiles").upsert({
-      id: user.id,
-      email: user.email,
-      name: user.user_metadata?.name || "",
-      preferences: { fiqh },
-      updated_at: new Date().toISOString(),
-    });
-  }, [user, fiqh]);
+    if (!user || !supabase) { setProfileReady(true); return; }
+    let active = true;
+    setProfileReady(false);
+    supabase.from("profiles").select("preferences").eq("id", user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) console.error("[Sakinah Profile] load failed", error);
+        const savedFiqh = data?.preferences?.fiqh;
+        if (savedFiqh === "hanafi" || savedFiqh === "jafria") setFiqh(savedFiqh);
+        setProfileReady(true);
+      });
+    return () => { active = false; };
+  }, [user]);
+  useEffect(() => {
+    if (!user || !supabase || !profileReady) return;
+    supabase.from("profiles").select("preferences").eq("id", user.id).maybeSingle()
+      .then(({ data }) => supabase.from("profiles").upsert({
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.name || "",
+        preferences: { ...(data?.preferences || {}), fiqh },
+        updated_at: new Date().toISOString(),
+      }))
+      .then(({ error } = {}) => { if (error) console.error("[Sakinah Profile] fiqh save failed", error); });
+  }, [user, fiqh, profileReady]);
   useEffect(() => {
     const ready = () => setUpdateAvailable(true);
     window.addEventListener("sakinah-update-ready", ready);
