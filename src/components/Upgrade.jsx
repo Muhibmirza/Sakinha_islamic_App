@@ -280,10 +280,66 @@ const flashes = [
     "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=65",
   ],
 ];
-async function shareCard(title, text) {
-  const data = { title, text: `${text}\n\nShared from Sakinah` };
-  if (navigator.share) await navigator.share(data);
-  else await navigator.clipboard?.writeText(data.text);
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(/\s+/);
+  let line = "";
+  const lines = [];
+  words.forEach((word) => {
+    const test = `${line}${word} `;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line.trim());
+      line = `${word} `;
+    } else line = test;
+  });
+  if (line) lines.push(line.trim());
+  lines.slice(0, 7).forEach((value, index) =>
+    ctx.fillText(value, x, y + index * lineHeight),
+  );
+}
+async function shareCard(title, text, imageUrl) {
+  const fallback = `${title}\n${text}\n\nShared from Sakinah`;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1080;
+    const ctx = canvas.getContext("2d");
+    const load = async (url) => createImageBitmap(await (await fetch(url)).blob());
+    const background = await load(imageUrl);
+    const scale = Math.max(canvas.width / background.width, canvas.height / background.height);
+    const width = background.width * scale;
+    const height = background.height * scale;
+    ctx.drawImage(background, (1080 - width) / 2, (1080 - height) / 2, width, height);
+    const gradient = ctx.createLinearGradient(0, 220, 0, 1080);
+    gradient.addColorStop(0, "rgba(3,25,15,.08)");
+    gradient.addColorStop(1, "rgba(3,25,15,.92)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1080, 1080);
+    ctx.fillStyle = "#D4AF37";
+    ctx.font = "700 34px serif";
+    ctx.fillText(title.toUpperCase(), 72, 690);
+    ctx.fillStyle = "#fff";
+    ctx.font = "600 54px serif";
+    drawWrappedText(ctx, text, 72, 770, 910, 70);
+    const logo = await load("/icons/icon-192.png");
+    ctx.globalAlpha = 0.92;
+    ctx.drawImage(logo, 900, 54, 110, 110);
+    ctx.globalAlpha = 1;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    const file = new File([blob], `sakinah-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`, { type: "image/png" });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title, text: "Shared from Sakinah", files: [file] });
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    if (navigator.share) await navigator.share({ title, text: fallback });
+    else await navigator.clipboard?.writeText(fallback);
+  }
 }
 export function EnhancedHome({ go, user }) {
   const [language, setLanguage] = useState("ur");
@@ -359,9 +415,10 @@ export function EnhancedHome({ go, user }) {
             key={title}
             loading="lazy"
           >
+            <img className="flash-watermark" src="/icons/icon-192.png" alt="Sakinah" />
             <span>{title}</span>
             <p>{text}</p>
-            <button onClick={() => shareCard(title, text)}>
+            <button onClick={() => shareCard(title, text, image)}>
               <Share2 />
             </button>
           </article>
@@ -410,9 +467,10 @@ export function FlashesView() {
             key={i}
             loading="lazy"
           >
+            <img className="flash-watermark" src="/icons/icon-192.png" alt="Sakinah" />
             <span>{title}</span>
             <p>{text}</p>
-            <button onClick={() => shareCard(title, text)}>
+            <button onClick={() => shareCard(title, text, image)}>
               <Share2 /> Share
             </button>
           </article>
@@ -448,6 +506,7 @@ export function DuasView() {
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [limit, setLimit] = useState(30);
   useEffect(() => {
     fetch("/assets/hisnul-muslim.json")
       .then((r) => r.json())
@@ -487,7 +546,7 @@ export function DuasView() {
         <Search />
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setLimit(30); }}
           placeholder="Search dua or situation"
         />
       </label>
@@ -495,7 +554,7 @@ export function DuasView() {
         <div className="empty">Loading complete dua library…</div>
       ) : (
         <div className="dua-list">
-          {shown.map((dua, index) => (
+          {shown.slice(0, limit).map((dua, index) => (
             <article key={`${dua.id}-${index}`}>
               <MoonStar />
               <div>
@@ -512,6 +571,7 @@ export function DuasView() {
           ))}
         </div>
       )}
+      {shown.length > limit && <button className="load-more" onClick={() => setLimit(limit + 30)}>Load 30 more · {shown.length - limit} remaining</button>}
     </>
   );
 }
@@ -684,44 +744,45 @@ export function MoreView({ user, fiqh, setFiqh, go, openAuth }) {
   );
 }
 export function NamesView() {
-  const names = [
-    "Ar-Rahman",
-    "Ar-Raheem",
-    "Al-Malik",
-    "Al-Quddus",
-    "As-Salam",
-    "Al-Mu'min",
-    "Al-Muhaymin",
-    "Al-Aziz",
-    "Al-Jabbar",
-    "Al-Mutakabbir",
-    "Al-Khaliq",
-    "Al-Bari",
-    "Al-Musawwir",
-    "Al-Ghaffar",
-    "Al-Qahhar",
-    "Al-Wahhab",
-    "Ar-Razzaq",
-    "Al-Fattah",
-  ];
+  const [names, setNames] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("sakinah-asma-99")) || []; }
+    catch { return []; }
+  });
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (names.length === 99) return;
+    fetch("https://api.aladhan.com/v1/asmaAlHusna")
+      .then((response) => {
+        if (!response.ok) throw new Error("Names service unavailable");
+        return response.json();
+      })
+      .then(({ data }) => {
+        const complete = Array.isArray(data) ? data.slice(0, 99) : [];
+        if (complete.length !== 99) throw new Error("The complete list could not be verified");
+        setNames(complete);
+        localStorage.setItem("sakinah-asma-99", JSON.stringify(complete));
+      })
+      .catch((reason) => setError(reason.message));
+  }, [names.length]);
   return (
     <>
       <div className="upgrade-title">
         <span>ASMA-UL-HUSNA</span>
         <h1>99 Names of Allah</h1>
       </div>
+      {error && <p className="note">{error}. Please reconnect and try again.</p>}
+      {!names.length && !error && <p className="note">Loading all 99 Names…</p>}
       <div className="names-grid">
-        {names.map((n, i) => (
-          <div key={n}>
-            <b>{i + 1}</b>
-            <span>{n}</span>
-          </div>
+        {names.map((name, index) => (
+          <article key={name.number || index}>
+            <b>{name.number || index + 1}</b>
+            <strong dir="rtl">{name.name}</strong>
+            <span>{name.transliteration}</span>
+            <small>{name.en?.meaning || name.meaning}</small>
+          </article>
         ))}
       </div>
-      <p className="note">
-        The complete 99-name reader will continue loading in future content
-        updates.
-      </p>
+      {names.length > 0 && <p className="note">Verified count: {names.length} of 99</p>}
     </>
   );
 }

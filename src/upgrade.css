@@ -756,3 +756,11 @@ html[data-theme="dark"] .moment-card {
   font: 500 22px/1.8 Noto Naskh Arabic;
   text-align: right;
 }
+
+.flash-watermark{position:absolute!important;right:12px;top:12px;width:34px!important;height:34px!important;border-radius:9px;opacity:.9;z-index:2}.flash-strip article,.flash-gallery article{position:relative}.hajj-banner{background-image:linear-gradient(90deg,rgba(7,52,31,.94),rgba(7,52,31,.58)),url('https://images.unsplash.com/photo-1565552645632-d725f8bfc19a?auto=format&fit=crop&w=1000&q=75')!important;background-size:cover!important;background-position:center!important;color:#fff!important}
+
+.names-grid article{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px;display:grid;grid-template-columns:28px 1fr;gap:3px 8px}.names-grid article>b{grid-row:1/4;color:var(--gold)}.names-grid article>strong{font:600 21px/1.4 'Noto Naskh Arabic';color:var(--green2)}.names-grid article>span{font-size:10px;font-weight:700}.names-grid article>small{font-size:8px;color:var(--muted);line-height:1.35}
+
+.study-cards article{cursor:pointer;transition:.2s}.study-cards article.open{align-items:flex-start;border-color:var(--gold);box-shadow:var(--shadow)}.lesson-content{margin-top:10px;padding:10px;background:var(--cream);border-radius:10px}.lesson-content p{font-size:10px!important}
+
+.load-more{width:100%;margin:12px 0;border:1px solid var(--gold);background:var(--card);color:var(--green2);border-radius:12px;padding:12px;font-weight:700;font-size:10px}

@@ -505,6 +505,18 @@ function HadithCard() {
     </section>
   );
 }
+function ReaderControls({ prefs, setPrefs }) {
+  return (
+    <div className="reader-controls">
+      <label>Arabic size <input type="range" min="22" max="50" value={prefs.fontSize} onChange={(e) => setPrefs({ ...prefs, fontSize: Number(e.target.value) })} /></label>
+      <select value={prefs.font} onChange={(e) => setPrefs({ ...prefs, font: e.target.value })}>
+        <option value="Noto Naskh Arabic">Noto Naskh</option>
+        <option value="Amiri">Amiri</option>
+      </select>
+      <label className="color-control">Text <input type="color" value={prefs.color} onChange={(e) => setPrefs({ ...prefs, color: e.target.value })} /></label>
+    </div>
+  );
+}
 function QuranView({ user }) {
   const [q, setQ] = useState(""),
     [list, setList] = useState([]),
@@ -514,6 +526,7 @@ function QuranView({ user }) {
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const [marks, setMarks] = useStored("bookmarks", []);
+  const [readerPrefs, setReaderPrefs] = useStored("quran-reader-prefs", { fontSize: 30, font: "Noto Naskh Arabic", color: "#0F5132" });
   useEffect(() => {
     getSurahs()
       .then(setList)
@@ -584,6 +597,7 @@ function QuranView({ user }) {
             <option value="ur">اردو</option>
           </select>
         </div>
+        <ReaderControls prefs={readerPrefs} setPrefs={setReaderPrefs} />
         {loading ? (
           <Empty text="Loading the complete Surah…" />
         ) : (
@@ -606,7 +620,7 @@ function QuranView({ user }) {
                     </button>
                   </div>
                 </div>
-                <p className="arabic">
+                <p className="arabic" style={{ fontSize: `${readerPrefs.fontSize}px`, fontFamily: readerPrefs.font, color: readerPrefs.color }}>
                   {a.text} <i>{a.numberInSurah}</i>
                 </p>
                 <p dir={lang === "ur" ? "rtl" : "ltr"}>
@@ -661,96 +675,75 @@ function QuranView({ user }) {
 }
 function TasbeehView({ user }) {
   const presets = [
-    ["SubhanAllah", "سُبْحَانَ ٱللَّٰهِ", 33],
-    ["Alhamdulillah", "ٱلْحَمْدُ لِلَّٰهِ", 33],
-    ["Allahu Akbar", "ٱللَّٰهُ أَكْبَرُ", 34],
+    { id: "subhanallah", title: "SubhanAllah", arabic: "سُبْحَانَ ٱللَّٰهِ", translation: "Glory be to Allah", target: 33 },
+    { id: "alhamdulillah", title: "Alhamdulillah", arabic: "ٱلْحَمْدُ لِلَّٰهِ", translation: "All praise is for Allah", target: 33 },
+    { id: "allahu-akbar", title: "Allahu Akbar", arabic: "ٱللَّٰهُ أَكْبَرُ", translation: "Allah is the Greatest", target: 34 },
   ];
-  const [idx, setIdx] = useStored("dhikr-preset", 0);
+  const [customs, setCustoms] = useStored("sakinah-custom-tasbeehs", []);
+  const [activeId, setActiveId] = useStored("dhikr-preset", "subhanallah");
   const [count, setCount] = useStored("tasbeeh-count", 0);
   const [history, setHistory] = useStored("tasbeeh-history", []);
-  const tap = () => {
-    setCount(count + 1);
-    navigator.vibrate?.(18);
-  };
-  const reset = async () => {
-    if (count)
-      setHistory(
-        [
-          {
-            date: new Date().toLocaleDateString(),
-            count,
-            name: presets[idx][0],
-          },
-          ...history,
-        ].slice(0, 7),
-      );
-    if (count && user && supabase)
-      await supabase.from("tasbeeh_sessions").insert({
-        user_id: user.id,
-        dhikr: presets[idx][0],
-        count,
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ title: "", translation: "", target: 33, image: "" });
+  const all = [...presets, ...customs];
+  const active = all.find((item) => item.id === activeId) || presets[0];
+  useEffect(() => {
+    if (!user || !supabase) return;
+    supabase.from("bookmarks").select("payload").eq("kind", "book").like("reference", "tasbeeh:%")
+      .then(({ data }) => {
+        const remote = (data || []).map((row) => row.payload).filter((item) => item?.id);
+        if (remote.length) setCustoms((local) => [...local, ...remote.filter((item) => !local.some((saved) => saved.id === item.id))]);
       });
+  }, [user]);
+  const tap = () => { setCount(count + 1); navigator.vibrate?.(18); };
+  const reset = async () => {
+    if (count) {
+      setHistory([{ date: new Date().toLocaleDateString(), count, name: active.title }, ...history].slice(0, 30));
+      if (user && supabase) await supabase.from("tasbeeh_sessions").insert({ user_id: user.id, dhikr: active.title, count });
+    }
     setCount(0);
+  };
+  const chooseImage = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((current) => ({ ...current, image: reader.result }));
+    reader.readAsDataURL(file);
+  };
+  const create = async (event) => {
+    event.preventDefault();
+    if (!form.title.trim() || Number(form.target) < 1) return;
+    const item = { ...form, id: `custom-${Date.now()}`, title: form.title.trim(), target: Number(form.target), arabic: form.title.trim() };
+    setCustoms([...customs, item]);
+    setActiveId(item.id);
+    setCount(0);
+    if (user && supabase) await supabase.from("bookmarks").upsert({ user_id: user.id, kind: "book", reference: `tasbeeh:${item.id}`, payload: item });
+    setForm({ title: "", translation: "", target: 33, image: "" });
+    setCreating(false);
   };
   return (
     <>
       <HeroTitle eyebrow="REMEMBRANCE" title="Find stillness in dhikr." />
       <div className="preset-row">
-        {presets.map((p, i) => (
-          <button
-            className={i === idx ? "selected" : ""}
-            onClick={() => {
-              setIdx(i);
-              setCount(0);
-            }}
-            key={p[0]}
-          >
-            {p[0]}
-          </button>
-        ))}
+        {all.map((item) => <button className={item.id === active.id ? "selected" : ""} onClick={() => { setActiveId(item.id); setCount(0); }} key={item.id}>{item.title}</button>)}
+        <button onClick={() => setCreating(true)}><Plus /> My Tasbeeh</button>
       </div>
-      <section className="tasbeeh-card">
-        <span className="arabic dhikr">{presets[idx][1]}</span>
-        <p>{presets[idx][0]}</p>
-        <button className="counter" onClick={tap}>
-          <span>{count}</span>
-          <small>of {presets[idx][2]}</small>
-        </button>
-        <div className="progress">
-          <i
-            style={{
-              width: `${Math.min(100, (count / presets[idx][2]) * 100)}%`,
-            }}
-          />
-        </div>
-        <div className="tasbeeh-actions">
-          <button onClick={() => setCount(Math.max(0, count - 1))}>
-            <Minus /> Undo
-          </button>
-          <button onClick={reset}>
-            <RotateCcw /> Save & reset
-          </button>
-        </div>
+      {creating && <form className="custom-tasbeeh-form" onSubmit={create}>
+        <h3>Create My Tasbeeh</h3>
+        <input required placeholder="Zikr title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <input placeholder="Translation" value={form.translation} onChange={(e) => setForm({ ...form, translation: e.target.value })} />
+        <input required type="number" min="1" placeholder="Target count" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+        <label>Background image <input type="file" accept="image/*" onChange={chooseImage} /></label>
+        <div><button type="button" onClick={() => setCreating(false)}>Cancel</button><button type="submit">Save Tasbeeh</button></div>
+      </form>}
+      <section className="tasbeeh-card" style={active.image ? { backgroundImage: `linear-gradient(rgba(255,255,255,.88),rgba(255,255,255,.88)),url(${active.image})`, backgroundSize: "cover" } : undefined}>
+        <span className="arabic dhikr">{active.arabic}</span><p>{active.translation || active.title}</p>
+        <button className="counter" onClick={tap}><span>{count}</span><small>of {active.target}</small></button>
+        <div className="progress"><i style={{ width: `${Math.min(100, (count / active.target) * 100)}%` }} /></div>
+        <div className="tasbeeh-actions"><button onClick={() => setCount(Math.max(0, count - 1))}><Minus /> Undo</button><button onClick={reset}><RotateCcw /> Save & reset</button></div>
       </section>
-      <div className="list-head">
-        <b>Recent practice</b>
-        <span>{history.reduce((a, h) => a + h.count, 0)} total</span>
-      </div>
-      {history.length ? (
-        <div className="history">
-          {history.map((h, i) => (
-            <div key={i}>
-              <span>
-                {h.name}
-                <small>{h.date}</small>
-              </span>
-              <b>+{h.count}</b>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Empty text="Your completed sessions will appear here." />
-      )}
+      <div className="list-head"><b>Recent practice</b><span>{history.reduce((sum, item) => sum + item.count, 0)} total</span></div>
+      {history.length ? <div className="history">{history.map((item, index) => <div key={`${item.date}-${index}`}><span>{item.name}<small>{item.date}</small></span><b>+{item.count}</b></div>)}</div> : <Empty text="Your completed sessions will appear here." />}
     </>
   );
 }
@@ -1294,6 +1287,7 @@ function ProfileView({ user, openAuth }) {
 function QuranExperience({ user }) {
   const [mode, setMode] = useState("alquran");
   const [reader, setReader] = useState("juz");
+  const [lesson, setLesson] = useState(null);
   const study = {
     fahm: {
       eyebrow: "FAHM-UL-QURAN",
@@ -1371,11 +1365,14 @@ function QuranExperience({ user }) {
           <HeroTitle eyebrow={study[mode].eyebrow} title={study[mode].title} />
           <div className="study-cards">
             {study[mode].cards.map(([title, text], index) => (
-              <article key={title}>
+              <article key={title} role="button" tabIndex="0" className={lesson === mode + "-" + index ? "open" : ""} onClick={() => setLesson(lesson === mode + "-" + index ? null : mode + "-" + index)}>
                 <span>{index + 1}</span>
                 <div>
                   <b>{title}</b>
                   <p>{text}</p>
+                  {lesson === mode + "-" + index && (
+                    <div className="lesson-content"><b>Lesson {index + 1}</b><p>{mode === "fahm" ? "Read the passage with its revelation setting, key vocabulary and a concise reflection prompt. Save one insight and revisit the ayah in context." : "Study a small group of high-frequency Quranic words, review their meanings, then identify them in the original Arabic text."}</p></div>
+                  )}
                 </div>
                 <ChevronRight />
               </article>
@@ -1422,65 +1419,55 @@ const JUZ_NAMES = [
   "Tabarakallazi",
   "Amma Yatasa\u0027aloon",
 ];
-function JuzBrowser() {
-  const [selected, setSelected] = useState(null),
-    [data, setData] = useState(null),
-    [loading, setLoading] = useState(false);
-  const open = async (n) => {
-    setSelected(n);
+const JUZ_ARABIC_NAMES = [
+  "الم", "سَيَقُولُ", "تِلْكَ الرُّسُلُ", "لَنْ تَنَالُوا", "وَالْمُحْصَنَاتُ", "لَا يُحِبُّ اللَّهُ", "وَإِذَا سَمِعُوا", "وَلَوْ أَنَّنَا", "قَالَ الْمَلَأُ", "وَاعْلَمُوا", "يَعْتَذِرُونَ", "وَمَا مِنْ دَابَّةٍ", "وَمَا أُبَرِّئُ", "رُبَمَا", "سُبْحَانَ الَّذِي", "قَالَ أَلَمْ", "اقْتَرَبَ", "قَدْ أَفْلَحَ", "وَقَالَ الَّذِينَ", "أَمَّنْ خَلَقَ", "اتْلُ مَا أُوحِيَ", "وَمَنْ يَقْنُتْ", "وَمَا لِيَ", "فَمَنْ أَظْلَمُ", "إِلَيْهِ يُرَدُّ", "حم", "قَالَ فَمَا خَطْبُكُمْ", "قَدْ سَمِعَ اللَّهُ", "تَبَارَكَ الَّذِي", "عَمَّ يَتَسَاءَلُونَ"
+];function JuzBrowser() {
+  const [selected, setSelected] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [lang, setLang] = useState("ur");
+  const [prefs, setPrefs] = useStored("quran-reader-prefs", { fontSize: 30, font: "Noto Naskh Arabic", color: "#0F5132" });
+  const open = async (number) => {
+    setSelected(number);
     setLoading(true);
     setData(null);
     try {
-      setData(await getJuz(n));
-    } finally {
-      setLoading(false);
-    }
+      const [arabic, english, urdu] = await Promise.all([
+        getJuz(number), getJuz(number, "en.sahih"), getJuz(number, "ur.jalandhry"),
+      ]);
+      setData({ arabic, english, urdu });
+    } finally { setLoading(false); }
   };
-  if (selected)
+  if (selected) {
+    const translation = lang === "ur" ? data?.urdu?.ayahs : data?.english?.ayahs;
     return (
       <>
         <div className="reader-head">
-          <button onClick={() => setSelected(null)}>
-            <ChevronLeft />
-          </button>
-          <div>
-            <h2>Juz {selected}</h2>
-            <span>Para {selected} · Uthmani Quran</span>
-          </div>
+          <button onClick={() => setSelected(null)}><ChevronLeft /></button>
+          <div><h2>Juz {selected} · <span dir="rtl">{JUZ_ARABIC_NAMES[selected - 1]}</span></h2><span>{JUZ_NAMES[selected - 1]} · Para {selected}</span></div>
+          <select value={lang} onChange={(event) => setLang(event.target.value)}><option value="ur">اردو</option><option value="en">English</option></select>
         </div>
-        {loading ? (
-          <Empty text="Loading Juz…" />
-        ) : (
-          <div>
-            {data?.ayahs?.map((a) => (
-              <article className="ayah" key={a.number}>
-                <div className="ayah-meta">
-                  <span>
-                    {a.surah.number}:{a.numberInSurah}
-                  </span>
-                  <small>{a.surah.englishName}</small>
-                </div>
-                <p className="arabic">
-                  {a.text} <i>{a.numberInSurah}</i>
-                </p>
-              </article>
-            ))}
-          </div>
+        <ReaderControls prefs={prefs} setPrefs={setPrefs} />
+        {loading ? <Empty text="Loading complete Juz…" /> : (
+          <div>{data?.arabic?.ayahs?.map((ayah, index) => (
+            <article className="ayah" key={ayah.number}>
+              <div className="ayah-meta"><span>{ayah.surah.number}:{ayah.numberInSurah}</span><small>{ayah.surah.englishName}</small></div>
+              <p className="arabic" style={{ fontSize: `${prefs.fontSize}px`, fontFamily: prefs.font, color: prefs.color }}>{ayah.text} <i>{ayah.numberInSurah}</i></p>
+              <p dir={lang === "ur" ? "rtl" : "ltr"}>{translation?.[index]?.text}</p>
+            </article>
+          ))}</div>
         )}
       </>
     );
+  }
   return (
     <>
       <HeroTitle eyebrow="THIRTY PARTS" title="Read by Juz or Para." />
-      <div className="juz-grid">
-        {Array.from({ length: 30 }, (_, i) => (
-          <button key={i} onClick={() => open(i + 1)}>
-            <b>{i + 1}</b>
-            <span>{JUZ_NAMES[i]}</span>
-            <small>Juz · Para {i + 1}</small>
-          </button>
-        ))}
-      </div>
+      <div className="juz-grid">{Array.from({ length: 30 }, (_, index) => (
+        <button key={index} onClick={() => open(index + 1)}>
+          <b>{index + 1}</b><strong dir="rtl">{JUZ_ARABIC_NAMES[index]}</strong><span>{JUZ_NAMES[index]}</span><small>Juz · Para {index + 1}</small>
+        </button>
+      ))}</div>
     </>
   );
 }
@@ -1751,6 +1738,9 @@ function Empty({ text }) {
 }
 function App() {
   const params = new URLSearchParams(location.search);
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
   const [view, setView] = useState(params.get("view") || "home"),
     [dark, setDark] = useStored("dark-mode", params.get("theme") === "dark"),
     [fiqh, setFiqh] = useStored("sakinah-fiqh", "hanafi"),
@@ -1762,13 +1752,13 @@ function App() {
     [updateAvailable, setUpdateAvailable] = useState(false),
     [showOnboarding, setShowOnboarding] = useState(
       () =>
+        isStandalone &&
         localStorage.getItem("sakinah-onboarding-v2") !== "1" &&
         params.get("screenshot") !== "1",
     ),
     [showInstallGate, setShowInstallGate] = useState(
       () =>
-        !window.matchMedia("(display-mode: standalone)").matches &&
-        !window.navigator.standalone &&
+        !isStandalone &&
         params.get("screenshot") !== "1" &&
         sessionStorage.getItem("sakinah-install-dismissed") !== "1",
     );
@@ -1953,7 +1943,7 @@ function App() {
       {authOpen && (
         <AuthModal initialMode={authMode} close={() => setAuthOpen(false)} />
       )}
-      {showInstallGate && !showOnboarding && (
+      {showInstallGate && (
         <InstallGate
           prompt={install}
           close={() => {
@@ -1962,7 +1952,7 @@ function App() {
           }}
         />
       )}
-      {authReady && showOnboarding && (
+      {authReady && isStandalone && showOnboarding && (
         <EnhancedOnboarding
           onDone={(selectedFiqh) => {
             setFiqh(selectedFiqh);

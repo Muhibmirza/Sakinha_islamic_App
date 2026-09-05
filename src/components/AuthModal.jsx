@@ -17,14 +17,26 @@ export default function AuthModal({ close, initialMode = "login" }) {
       return setMessage("Supabase credentials are not configured yet.");
     setBusy(true);
     setMessage("");
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: authRedirectUrl,
-        skipBrowserRedirect: true,
-        queryParams: { prompt: "select_account" },
-      },
-    });
+    let data;
+    let error;
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: authRedirectUrl,
+            skipBrowserRedirect: true,
+            queryParams: { prompt: "select_account" },
+          },
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Google sign-in timed out. Check your connection and try again.")), 15000)),
+      ]);
+      ({ data, error } = result);
+    } catch (reason) {
+      setBusy(false);
+      setMessage(reason.message || "Google sign-in could not start.");
+      return;
+    }
     if (error || !data?.url) {
       setBusy(false);
       setMessage(
