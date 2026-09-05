@@ -192,17 +192,92 @@ const flashes = [
   [
     "Patience is beautiful",
     "Indeed, Allah is with the patient.",
-    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=75",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=65",
   ],
   [
     "A grateful heart",
     "If you are grateful, I will surely increase you.",
-    "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=700&q=75",
+    "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=700&q=65",
   ],
   [
     "Jummah Mubarak",
-    "Send blessings upon the Prophet ﷺ.",
-    "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=75",
+    "Send blessings and peace upon the Prophet ﷺ.",
+    "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Eid Mubarak",
+    "May Allah accept from us and from you.",
+    "https://images.unsplash.com/photo-1539650116574-75c0c6d73f6e?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Ramadan Kareem",
+    "A month of mercy, forgiveness and renewal.",
+    "https://images.unsplash.com/photo-1537181534458-45dcee76ae90?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Trust Allah",
+    "Whoever relies upon Allah, He is sufficient.",
+    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Remember Him",
+    "In Allah's remembrance hearts find rest.",
+    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Morning light",
+    "Begin the day with gratitude and remembrance.",
+    "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Night reflection",
+    "Seek forgiveness before your day is complete.",
+    "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Dua changes hearts",
+    "Call upon Me; I will respond to you.",
+    "https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Be kind",
+    "Allah loves those who do good.",
+    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Seek knowledge",
+    "My Lord, increase me in knowledge.",
+    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "For the newlyweds",
+    "May Allah bless you and unite you in goodness.",
+    "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Welcome home",
+    "May peace, mercy and blessings enter your home.",
+    "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "A blessed journey",
+    "May Allah guard every step of your travel.",
+    "https://images.unsplash.com/photo-1483347756197-71ef80e95f73?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Friday reminder",
+    "Hasten to the remembrance of Allah.",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Sabr and Salah",
+    "Seek help through patience and prayer.",
+    "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=700&q=65",
+  ],
+  [
+    "Peace be upon you",
+    "Spread salam among yourselves.",
+    "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=65",
   ],
 ];
 async function shareCard(title, text) {
@@ -276,12 +351,13 @@ export function EnhancedHome({ go, user }) {
         <button onClick={() => go("flashes")}>See all</button>
       </div>
       <div className="flash-strip">
-        {flashes.map(([title, text, image]) => (
+        {flashes.slice(0, 6).map(([title, text, image]) => (
           <article
             style={{
               backgroundImage: `linear-gradient(0deg,rgba(4,28,17,.8),rgba(4,28,17,.1)),url(${image})`,
             }}
             key={title}
+            loading="lazy"
           >
             <span>{title}</span>
             <p>{text}</p>
@@ -326,12 +402,13 @@ export function FlashesView() {
         <h1>Flashes & Greetings</h1>
       </div>
       <div className="flash-gallery">
-        {[...flashes, ...flashes].map(([title, text, image], i) => (
+        {flashes.map(([title, text, image], i) => (
           <article
             style={{
               backgroundImage: `linear-gradient(0deg,rgba(4,28,17,.85),transparent),url(${image})`,
             }}
             key={i}
+            loading="lazy"
           >
             <span>{title}</span>
             <p>{text}</p>
@@ -368,25 +445,73 @@ const duas = [
   ],
 ];
 export function DuasView() {
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch("/assets/hisnul-muslim.json")
+      .then((r) => r.json())
+      .then((data) => {
+        const all = [];
+        data.segments.forEach((segment) =>
+          segment.categories.forEach((category) =>
+            category.titles.forEach((title) =>
+              title.duas.forEach((dua) =>
+                all.push({
+                  ...dua,
+                  segment: segment.segment_name,
+                  category: category.category_name,
+                  title: title.title_name,
+                }),
+              ),
+            ),
+          ),
+        );
+        setItems(all);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+  const shown = items.filter((x) =>
+    [x.title, x.category, x.translation, x.arabic]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
   return (
     <>
       <div className="upgrade-title">
-        <span>SUPPLICATIONS</span>
-        <h1>Daily Duas</h1>
+        <span>367 AUTHENTIC SUPPLICATIONS</span>
+        <h1>Hisnul Muslim</h1>
       </div>
-      <div className="dua-list">
-        {duas.map(([t, ar, en, ur, I]) => (
-          <article key={t}>
-            <I />
-            <div>
-              <b>{t}</b>
-              <p className="arabic">{ar}</p>
-              <p>{ur}</p>
-              <small>{en}</small>
-            </div>
-          </article>
-        ))}
-      </div>
+      <label className="global-search">
+        <Search />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search dua or situation"
+        />
+      </label>
+      {loading ? (
+        <div className="empty">Loading complete dua library…</div>
+      ) : (
+        <div className="dua-list">
+          {shown.map((dua, index) => (
+            <article key={`${dua.id}-${index}`}>
+              <MoonStar />
+              <div>
+                <b>{dua.title}</b>
+                <small>
+                  {dua.segment} · {dua.category}
+                </small>
+                <p className="arabic">{dua.arabic}</p>
+                {dua.latin && <p>{dua.latin}</p>}
+                <p>{dua.translation}</p>
+                {dua.source && <small>Source: {dua.source}</small>}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -596,6 +721,105 @@ export function NamesView() {
       <p className="note">
         The complete 99-name reader will continue loading in future content
         updates.
+      </p>
+    </>
+  );
+}
+export function JafriaCatalogue({ kind = "Hadith" }) {
+  const [books, setBooks] = useState([]);
+  const [selected, setSelected] = useState(null);
+  useEffect(() => {
+    fetch("https://www.thaqalayn-api.net/api/v2/allbooks", {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((all) => {
+        const wanted = [
+          "Al-Kāfi",
+          "Man lā yaḥḍuruh al-Faqīh",
+          "Tahdhīb al-Aḥkām",
+          "Al-Istibṣār",
+        ];
+        const grouped = wanted
+          .map((name) => {
+            const volumes = all.filter(
+              (x) =>
+                x.BookName === name ||
+                x.BookName?.toLowerCase().includes(
+                  name.toLowerCase().split(" ")[0],
+                ),
+            );
+            return volumes.length
+              ? {
+                  name,
+                  author: volumes[0].author,
+                  description: volumes[0].bookDescription,
+                  volumes,
+                }
+              : null;
+          })
+          .filter(Boolean);
+        setBooks(grouped);
+      })
+      .catch(() => setBooks([]));
+  }, []);
+  if (selected)
+    return (
+      <>
+        <div className="reader-head">
+          <button onClick={() => setSelected(null)}>
+            <ChevronRight />
+          </button>
+          <div>
+            <h2>{selected.name}</h2>
+            <span>{selected.author}</span>
+          </div>
+        </div>
+        <p className="library-intro">{selected.description}</p>
+        <div className="topic-list">
+          {selected.volumes.map((v) => (
+            <button key={v.bookId}>
+              <span>{v.volume}</span>
+              <div>
+                <b>Volume {v.volume}</b>
+                <small>
+                  {v.idRangeMax.toLocaleString()} narrations · {v.translator}
+                </small>
+              </div>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  return (
+    <>
+      <div className="upgrade-title">
+        <span>JAFRIA {kind.toUpperCase()} SOURCES</span>
+        <h1>Primary collections</h1>
+      </div>
+      {!books.length ? (
+        <div className="empty">Loading Jafria catalogue…</div>
+      ) : (
+        <div className="collection-list">
+          {books.map((b) => (
+            <button key={b.name} onClick={() => setSelected(b)}>
+              <span>
+                <ScrollText />
+              </span>
+              <div>
+                <b>{b.name}</b>
+                <small>
+                  {b.author} · {b.volumes.length} volumes
+                </small>
+              </div>
+              <ChevronRight />
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="note">
+        Source catalogue: Thaqalayn API. Individual narration grading should be
+        checked with qualified scholarship.
       </p>
     </>
   );

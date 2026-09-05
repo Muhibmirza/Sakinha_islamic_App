@@ -17,17 +17,22 @@ export default function AuthModal({ close, initialMode = "login" }) {
       return setMessage("Supabase credentials are not configured yet.");
     setBusy(true);
     setMessage("");
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: authRedirectUrl,
+        skipBrowserRedirect: true,
         queryParams: { prompt: "select_account" },
       },
     });
-    if (error) {
+    if (error || !data?.url) {
       setBusy(false);
-      setMessage(error.message);
+      setMessage(
+        error?.message || "Google sign-in could not start. Please try again.",
+      );
+      return;
     }
+    window.location.assign(data.url);
   };
   const run = async (e) => {
     e.preventDefault();

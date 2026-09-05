@@ -25,6 +25,7 @@ import {
   Download,
   X,
   Check,
+  Share2,
 } from "lucide-react";
 import AuthModal from "./components/AuthModal";
 import {
@@ -37,6 +38,7 @@ import {
   IbadatView,
   MoreView,
   NamesView,
+  JafriaCatalogue,
 } from "./components/Upgrade";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -319,6 +321,7 @@ function useLivePrayerData(fiqh) {
             point.latitude,
             point.longitude,
             new Date(),
+            fiqh,
           );
           setState({ data, coords: point, loading: false, error: "" });
         } catch (error) {
@@ -337,7 +340,7 @@ function useLivePrayerData(fiqh) {
         })),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
-  }, []);
+  }, [fiqh]);
   useEffect(() => {
     refresh();
     const refreshWhenVisible = () => {
@@ -975,92 +978,152 @@ function LibraryView() {
   );
 }
 function CollectionReader({ collection, close }) {
-  const [data, setData] = useState(null),
-    [q, setQ] = useState(""),
-    [page, setPage] = useState(0),
-    [error, setError] = useState("");
+  const [data, setData] = useState(null);
+  const [topic, setTopic] = useState(null);
+  const [language, setLanguage] = useState("ur");
+  const [error, setError] = useState("");
   useEffect(() => {
-    getHadithCollection(collection.id)
-      .then(setData)
+    setData(null);
+    setTopic(null);
+    setError("");
+    Promise.all([
+      getHadithCollection(collection.id),
+      getHadithCollection(collection.id.replace("eng-", "urd-")).catch(
+        () => null,
+      ),
+      getHadithCollection(collection.id.replace("eng-", "ara-")).catch(
+        () => null,
+      ),
+    ])
+      .then(([english, urdu, arabic]) => setData({ english, urdu, arabic }))
       .catch((e) => setError(e.message));
   }, [collection]);
-  const all = data?.hadiths || [],
-    filtered = q
-      ? all.filter(
-          (h) =>
-            h.text.toLowerCase().includes(q.toLowerCase()) ||
-            String(h.hadithnumber) === q,
-        )
-      : all,
-    shown = filtered.slice(page * 20, page * 20 + 20);
+  const english = data?.english?.hadiths || [];
+  const translated = data?.urdu?.hadiths || [];
+  const arabic = data?.arabic?.hadiths || [];
+  const byNumber = (items) =>
+    new Map(items.map((h) => [String(h.hadithnumber), h]));
+  const translationMap = byNumber(translated),
+    arabicMap = byNumber(arabic);
+  const topics = useMemo(() => {
+    const groups = new Map();
+    english.forEach((h) => {
+      const key = String(h.reference?.book || "General");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(h);
+    });
+    return [...groups.entries()];
+  }, [english]);
+  if (!data)
+    return (
+      <>
+        <div className="reader-head">
+          <button onClick={close}>
+            <ChevronLeft />
+          </button>
+          <div>
+            <h2>{collection.name}</h2>
+            <span>Loading books and translations…</span>
+          </div>
+        </div>
+        {error ? (
+          <div className="toast">{error}</div>
+        ) : (
+          <Empty text="Opening collection…" />
+        )}
+      </>
+    );
+  if (!topic)
+    return (
+      <>
+        <div className="reader-head">
+          <button onClick={close}>
+            <ChevronLeft />
+          </button>
+          <div>
+            <h2>{collection.name}</h2>
+            <span>Select a book / topic</span>
+          </div>
+        </div>
+        <div className="topic-list">
+          {topics.map(([book, items]) => (
+            <button key={book} onClick={() => setTopic({ book, items })}>
+              <span>{book}</span>
+              <div>
+                <b>Book {book}</b>
+                <small>{items.length} hadiths</small>
+              </div>
+              <ChevronRight />
+            </button>
+          ))}
+        </div>
+      </>
+    );
   return (
     <>
       <div className="reader-head">
-        <button onClick={close}>
+        <button onClick={() => setTopic(null)}>
           <ChevronLeft />
         </button>
         <div>
           <h2>{collection.name}</h2>
           <span>
-            {all.length
-              ? `${all.length.toLocaleString()} narrations`
-              : "Loading complete collection…"}
+            Book {topic.book} · {topic.items.length} hadiths
           </span>
         </div>
+        <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+          <option value="ur">Urdu</option>
+          <option value="en">English</option>
+        </select>
       </div>
-      <SearchBox
-        value={q}
-        setValue={(v) => {
-          setQ(v);
-          setPage(0);
-        }}
-        placeholder="Search text or exact Hadith number"
-      />
-      {error && <div className="toast">{error}</div>}
-      {!data ? (
-        <Empty text="Opening the complete collection…" />
-      ) : (
-        <>
-          <div className="hadith-feed">
-            {shown.map((h) => (
-              <article key={h.hadithnumber}>
-                <span>
-                  {collection.name} · {h.hadithnumber}
-                </span>
-                <p>“{h.text}”</p>
-                <small>
-                  Book {h.reference?.book} · Hadith {h.reference?.hadith}
-                </small>
-              </article>
-            ))}
-          </div>
-          <div className="pagination">
-            <button disabled={!page} onClick={() => setPage(page - 1)}>
-              <ChevronLeft /> Previous
-            </button>
-            <span>
-              Page {page + 1} of {Math.max(1, Math.ceil(filtered.length / 20))}
-            </span>
-            <button
-              disabled={(page + 1) * 20 >= filtered.length}
-              onClick={() => setPage(page + 1)}
-            >
-              Next <ChevronRight />
-            </button>
-          </div>
-        </>
-      )}
+      <div className="hadith-feed">
+        {topic.items.map((h) => {
+          const key = String(h.hadithnumber),
+            ar = arabicMap.get(key)?.text,
+            ur = translationMap.get(key)?.text;
+          const shown = language === "ur" ? ur || h.text : h.text;
+          return (
+            <article key={key}>
+              <span>
+                {collection.name} · {key}
+              </span>
+              {ar && <p className="arabic">{ar}</p>}
+              <p>{shown}</p>
+              <small>
+                Book {h.reference?.book} · Hadith {h.reference?.hadith}
+              </small>
+              <button
+                aria-label="Share hadith"
+                onClick={() =>
+                  navigator.share
+                    ? navigator.share({
+                        title: `${collection.name} ${key}`,
+                        text: shown,
+                      })
+                    : navigator.clipboard?.writeText(shown)
+                }
+              >
+                <Share2 />
+              </button>
+            </article>
+          );
+        })}
+      </div>
     </>
   );
 }
 function HadithView({ user }) {
-  const [selected, setSelected] = useState(hadithCollections[0]),
+  const [selected, setSelected] = useState(null),
     [daily, setDaily] = useState(null);
   useEffect(() => {
     getDailyHadith()
       .then(setDaily)
       .catch(() => {});
   }, []);
+  if (selected)
+    return (
+      <CollectionReader collection={selected} close={() => setSelected(null)} />
+    );
   return (
     <>
       <HeroTitle eyebrow="SUNNAH" title="Words that light the way." />
@@ -1089,12 +1152,6 @@ function HadithView({ user }) {
           </button>
         ))}
       </div>
-      {selected && (
-        <CollectionReader
-          collection={selected}
-          close={() => setSelected(null)}
-        />
-      )}
     </>
   );
 }
@@ -1333,6 +1390,38 @@ function QuranExperience({ user }) {
     </>
   );
 }
+const JUZ_NAMES = [
+  "Alif Lam Meem",
+  "Sayaqool",
+  "Tilka Rusul",
+  "Lan Tana Loo",
+  "Wal Mohsanat",
+  "La Yuhibbullah",
+  "Wa Iza Samiu",
+  "Wa Lau Annana",
+  "Qalal Malao",
+  "Wa A\u0027lamu",
+  "Yatazeroon",
+  "Wa Mamin Da\u0027abat",
+  "Wa Ma Ubarri\u0027u",
+  "Rubama",
+  "Subhanallazi",
+  "Qal Alam",
+  "Iqtaraba",
+  "Qadd Aflaha",
+  "Wa Qalallazina",
+  "A\u0027man Khalaq",
+  "Utlu Ma Oohi",
+  "Wa Manyaqnut",
+  "Wa Mali",
+  "Faman Azlam",
+  "Elahe Yuruddo",
+  "Ha\u0027a Meem",
+  "Qala Fama Khatbukum",
+  "Qadd Sami Allah",
+  "Tabarakallazi",
+  "Amma Yatasa\u0027aloon",
+];
 function JuzBrowser() {
   const [selected, setSelected] = useState(null),
     [data, setData] = useState(null),
@@ -1387,7 +1476,8 @@ function JuzBrowser() {
         {Array.from({ length: 30 }, (_, i) => (
           <button key={i} onClick={() => open(i + 1)}>
             <b>{i + 1}</b>
-            <span>Juz · Para {i + 1}</span>
+            <span>{JUZ_NAMES[i]}</span>
+            <small>Juz · Para {i + 1}</small>
           </button>
         ))}
       </div>
@@ -1478,13 +1568,19 @@ function SearchBox({ value, setValue, placeholder }) {
   );
 }
 function InstallGate({ prompt, close }) {
+  const [installed, setInstalled] = useState(false);
   const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isAndroid = /android/i.test(navigator.userAgent);
+  useEffect(() => {
+    const done = () => setInstalled(true);
+    window.addEventListener("appinstalled", done);
+    return () => window.removeEventListener("appinstalled", done);
+  }, []);
   const installApp = async () => {
     if (!prompt) return;
     await prompt.prompt();
     const choice = await prompt.userChoice;
-    if (choice.outcome === "accepted") close();
+    if (choice.outcome === "accepted") setInstalled(true);
   };
   return (
     <div className="install-gate">
@@ -1494,41 +1590,61 @@ function InstallGate({ prompt, close }) {
         </button>
         <img src="/icons/icon-192.png" alt="Sakinah app icon" />
         <span>SAKINAH ISLAMIC COMPANION</span>
-        <h2>Install this app</h2>
-        <p>Keep Quran, prayer times, Hadith and daily dhikr one tap away.</p>
-        {isiOS ? (
-          <div className="ios-steps">
-            <b>Install on iPhone or iPad</b>
-            <ol>
-              <li>
-                Open this link in <strong>Safari</strong>.
-              </li>
-              <li>
-                Tap the <strong>Share</strong> button.
-              </li>
-              <li>
-                Select <strong>Add to Home Screen</strong>, then Add.
-              </li>
-            </ol>
-          </div>
-        ) : prompt ? (
-          <button className="gate-install" onClick={installApp}>
-            <Download /> Install Sakinah
-          </button>
-        ) : (
-          <div className="ios-steps">
-            <b>
-              {isAndroid ? "Android installation" : "Install from your browser"}
-            </b>
+        {installed ? (
+          <>
+            <h2>Sakinah is installed</h2>
             <p>
-              Open the browser menu and choose <strong>Install app</strong> or{" "}
-              <strong>Add to Home screen</strong>.
+              For security, Chrome does not allow a website to auto-launch an
+              installed app. Close this tab and open Sakinah from your Home
+              Screen or app drawer.
             </p>
-          </div>
+            <button className="gate-install" onClick={close}>
+              <Check /> Got it
+            </button>
+          </>
+        ) : (
+          <>
+            <h2>Install this app</h2>
+            <p>Open Sakinah in its own standalone app window.</p>
+            {isiOS ? (
+              <div className="ios-steps">
+                <b>Install on iPhone or iPad</b>
+                <ol>
+                  <li>
+                    Open this link in <strong>Safari</strong>.
+                  </li>
+                  <li>
+                    Tap the <strong>Share</strong> button.
+                  </li>
+                  <li>
+                    Select <strong>Add to Home Screen</strong>, turn on{" "}
+                    <strong>Open as Web App</strong>, then Add.
+                  </li>
+                  <li>Open Sakinah using the new Home Screen icon.</li>
+                </ol>
+              </div>
+            ) : prompt ? (
+              <button className="gate-install" onClick={installApp}>
+                <Download /> Install Sakinah
+              </button>
+            ) : (
+              <div className="ios-steps">
+                <b>
+                  {isAndroid
+                    ? "Android installation"
+                    : "Install from your browser"}
+                </b>
+                <p>
+                  Open the browser menu, choose <strong>Install app</strong>,
+                  then launch Sakinah from the Home Screen icon.
+                </p>
+              </div>
+            )}
+            <button className="continue-web" onClick={close}>
+              Continue in browser
+            </button>
+          </>
         )}
-        <button className="continue-web" onClick={close}>
-          Continue in browser
-        </button>
       </section>
     </div>
   );
@@ -1646,7 +1762,7 @@ function App() {
     [updateAvailable, setUpdateAvailable] = useState(false),
     [showOnboarding, setShowOnboarding] = useState(
       () =>
-        localStorage.getItem("sakinah-onboarded") !== "1" &&
+        localStorage.getItem("sakinah-onboarding-v2") !== "1" &&
         params.get("screenshot") !== "1",
     ),
     [showInstallGate, setShowInstallGate] = useState(
@@ -1734,8 +1850,14 @@ function App() {
       tasbeeh: <TasbeehView user={user} />,
       prayer: <PrayerView prayerData={prayerData} />,
       qibla: <QiblaView prayerData={prayerData} />,
-      library: <LibraryView />,
-      hadith: <HadithView user={user} />,
+      library:
+        fiqh === "jafria" ? <JafriaCatalogue kind="Books" /> : <LibraryView />,
+      hadith:
+        fiqh === "jafria" ? (
+          <JafriaCatalogue kind="Hadith" />
+        ) : (
+          <HadithView user={user} />
+        ),
       calendar: <CalendarView />,
       profile: <ProfileView user={user} openAuth={() => setAuthOpen(true)} />,
       ibadat: <IbadatView />,
@@ -1831,7 +1953,7 @@ function App() {
       {authOpen && (
         <AuthModal initialMode={authMode} close={() => setAuthOpen(false)} />
       )}
-      {showInstallGate && (
+      {showInstallGate && !showOnboarding && (
         <InstallGate
           prompt={install}
           close={() => {
@@ -1840,11 +1962,11 @@ function App() {
           }}
         />
       )}
-      {authReady && !showInstallGate && showOnboarding && (
+      {authReady && showOnboarding && (
         <EnhancedOnboarding
           onDone={(selectedFiqh) => {
             setFiqh(selectedFiqh);
-            localStorage.setItem("sakinah-onboarded", "1");
+            localStorage.setItem("sakinah-onboarding-v2", "1");
             setShowOnboarding(false);
           }}
         />

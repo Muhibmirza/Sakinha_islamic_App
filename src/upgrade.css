@@ -715,3 +715,44 @@ html[data-theme="dark"] .moment-card {
   width: 16px;
   color: var(--gold);
 }
+.topic-list {
+  display: grid;
+  gap: 8px;
+}
+.topic-list button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: left;
+}
+.topic-list button > span {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #e6f0ea;
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+.topic-list button > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.topic-list small {
+  font-size: 9px;
+  color: var(--muted);
+}
+.topic-list svg {
+  width: 16px;
+}
+.hadith-feed .arabic {
+  font: 500 22px/1.8 Noto Naskh Arabic;
+  text-align: right;
+}
