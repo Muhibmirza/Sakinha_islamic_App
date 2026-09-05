@@ -36,8 +36,9 @@ export default function AuthModal({ close, initialMode = "login" }) {
     setBusy(true);
     setMessage("");
     let error;
+    let data;
     if (mode === "signup")
-      ({ error } = await supabase.auth.signUp({
+      ({ data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { name }, emailRedirectTo: authRedirectUrl },
@@ -50,13 +51,12 @@ export default function AuthModal({ close, initialMode = "login" }) {
       ({ error } = await supabase.auth.signInWithPassword({ email, password }));
     setBusy(false);
     if (error) setMessage(error.message);
-    else if (mode === "login") close();
-    else
+    else if (mode === "login" || (mode === "signup" && data?.session)) close();
+    else if (mode === "signup")
       setMessage(
-        mode === "signup"
-          ? "Check your email to confirm your account."
-          : "Password-reset email sent.",
+        "Email confirmation is still enabled in Supabase. Turn off Confirm email to create accounts instantly.",
       );
+    else setMessage("Password-reset email sent.");
   };
   return (
     <div className="modal-backdrop">
