@@ -6,6 +6,7 @@ import "./auth.css";
 import "./content.css";
 import "./install.css";
 import "./onboarding.css";
+import "./upgrade.css";
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <App />
@@ -14,6 +15,7 @@ createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator)
   window.addEventListener("load", async () => {
     const registration = await navigator.serviceWorker.register("/sw.js");
+    registration.update();
     if (registration.waiting)
       window.dispatchEvent(new Event("sakinah-update-ready"));
     registration.addEventListener("updatefound", () => {

@@ -1,4 +1,4 @@
-const CACHE = "sakinah-v7";
+const CACHE = "sakinah-v8";
 const CORE = [
   "/",
   "/manifest.webmanifest",

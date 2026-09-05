@@ -27,6 +27,17 @@ import {
   Check,
 } from "lucide-react";
 import AuthModal from "./components/AuthModal";
+import {
+  EnhancedOnboarding,
+  PersistentPrayer,
+  EnhancedHome,
+  FlashesView,
+  DuasView,
+  ShahadatView,
+  IbadatView,
+  MoreView,
+  NamesView,
+} from "./components/Upgrade";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
 import {
   getSurahs,
@@ -280,7 +291,7 @@ function getNextPrayer(timings, now = new Date()) {
   next.date.setDate(next.date.getDate() + 1);
   return next;
 }
-function useLivePrayerData() {
+function useLivePrayerData(fiqh) {
   const [state, setState] = useState({
     data: null,
     coords: null,
@@ -912,7 +923,7 @@ function QiblaView({ prayerData }) {
         <p>
           {prayerData.error ||
             (prayerData.loading
-              ? "Getting your precise location&"
+              ? "Getting your precise location..."
               : `Qibla direction from ${place}`)}
         </p>
         <button className="primary-btn" onClick={enableCompass}>
@@ -1224,35 +1235,100 @@ function ProfileView({ user, openAuth }) {
   );
 }
 function QuranExperience({ user }) {
-  const [mode, setMode] = useState("surahs");
+  const [mode, setMode] = useState("alquran");
+  const [reader, setReader] = useState("juz");
+  const study = {
+    fahm: {
+      eyebrow: "FAHM-UL-QURAN",
+      title: "Reflect with context.",
+      cards: [
+        [
+          "Theme and setting",
+          "Learn when a passage was revealed and its central message.",
+        ],
+        ["Vocabulary", "Explore important Quranic words and recurring roots."],
+        [
+          "Reflection",
+          "Read concise study prompts alongside the original ayah.",
+        ],
+      ],
+    },
+    understand: {
+      eyebrow: "UNDERSTAND QURAN",
+      title: "Build understanding steadily.",
+      cards: [
+        [
+          "Quranic Arabic",
+          "Recognize high-frequency words used throughout the Quran.",
+        ],
+        [
+          "Study plans",
+          "Follow short daily lessons and preserve your progress.",
+        ],
+        ["Practice", "Review meanings before moving to the next lesson."],
+      ],
+    },
+  };
   return (
     <>
       <div className="quran-modes">
         <button
-          className={mode === "surahs" ? "active" : ""}
-          onClick={() => setMode("surahs")}
+          className={mode === "alquran" ? "active" : ""}
+          onClick={() => setMode("alquran")}
         >
-          114 Surahs
+          Al-Quran
         </button>
         <button
-          className={mode === "juz" ? "active" : ""}
-          onClick={() => setMode("juz")}
+          className={mode === "fahm" ? "active" : ""}
+          onClick={() => setMode("fahm")}
         >
-          30 Juz / Para
+          Fahm-ul-Quran
         </button>
         <button
-          className={mode === "editions" ? "active" : ""}
-          onClick={() => setMode("editions")}
+          className={mode === "understand" ? "active" : ""}
+          onClick={() => setMode("understand")}
         >
-          Quran Editions
+          Understand Quran
         </button>
       </div>
-      {mode === "surahs" ? (
-        <QuranView user={user} />
-      ) : mode === "juz" ? (
-        <JuzBrowser />
+      {mode === "alquran" ? (
+        <>
+          <div className="reader-switch">
+            <button
+              className={reader === "juz" ? "active" : ""}
+              onClick={() => setReader("juz")}
+            >
+              30 Juz / Para
+            </button>
+            <button
+              className={reader === "surah" ? "active" : ""}
+              onClick={() => setReader("surah")}
+            >
+              114 Surahs
+            </button>
+          </div>
+          {reader === "juz" ? <JuzBrowser /> : <QuranView user={user} />}
+        </>
       ) : (
-        <EditionBrowser />
+        <>
+          <HeroTitle eyebrow={study[mode].eyebrow} title={study[mode].title} />
+          <div className="study-cards">
+            {study[mode].cards.map(([title, text], index) => (
+              <article key={title}>
+                <span>{index + 1}</span>
+                <div>
+                  <b>{title}</b>
+                  <p>{text}</p>
+                </div>
+                <ChevronRight />
+              </article>
+            ))}
+          </div>
+          <p className="note">
+            Study summaries support reflection and do not replace qualified
+            tafsir or a teacher.
+          </p>
+        </>
       )}
     </>
   );
@@ -1561,6 +1637,7 @@ function App() {
   const params = new URLSearchParams(location.search);
   const [view, setView] = useState(params.get("view") || "home"),
     [dark, setDark] = useStored("dark-mode", params.get("theme") === "dark"),
+    [fiqh, setFiqh] = useStored("sakinah-fiqh", "hanafi"),
     [install, setInstall] = useState(null),
     [user, setUser] = useState(null),
     [authReady, setAuthReady] = useState(!supabase),
@@ -1580,7 +1657,7 @@ function App() {
         sessionStorage.getItem("sakinah-install-dismissed") !== "1",
     );
   usePrayerScheduler();
-  const prayerData = useLivePrayerData();
+  const prayerData = useLivePrayerData(fiqh);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
@@ -1603,6 +1680,21 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    const signOut = () => supabase?.auth.signOut();
+    window.addEventListener("sakinah-signout", signOut);
+    return () => window.removeEventListener("sakinah-signout", signOut);
+  }, []);
+  useEffect(() => {
+    if (!user || !supabase) return;
+    supabase.from("profiles").upsert({
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.name || "",
+      preferences: { fiqh },
+      updated_at: new Date().toISOString(),
+    });
+  }, [user, fiqh]);
+  useEffect(() => {
     const ready = () => setUpdateAvailable(true);
     window.addEventListener("sakinah-update-ready", ready);
     return () => window.removeEventListener("sakinah-update-ready", ready);
@@ -1624,6 +1716,12 @@ function App() {
     hadith: "Hadith",
     calendar: "Calendar",
     profile: "Profile",
+    ibadat: "Ibadat",
+    flashes: "Flashes",
+    duas: "Duas",
+    shahadat: "Shahadat",
+    names: "99 Names",
+    more: "More",
   };
   const go = (v) => {
     setView(v);
@@ -1640,7 +1738,21 @@ function App() {
       hadith: <HadithView user={user} />,
       calendar: <CalendarView />,
       profile: <ProfileView user={user} openAuth={() => setAuthOpen(true)} />,
-    })[view] || <HomeView go={go} user={user} prayerData={prayerData} />;
+      ibadat: <IbadatView />,
+      flashes: <FlashesView />,
+      duas: <DuasView />,
+      shahadat: <ShahadatView />,
+      names: <NamesView />,
+      more: (
+        <MoreView
+          user={user}
+          fiqh={fiqh}
+          setFiqh={setFiqh}
+          go={go}
+          openAuth={() => setAuthOpen(true)}
+        />
+      ),
+    })[view] || <EnhancedHome go={go} user={user} />;
   return (
     <div className="app">
       <Header
@@ -1653,6 +1765,11 @@ function App() {
         onProfile={() => go("profile")}
       />
       <main>
+        <PersistentPrayer
+          prayerData={prayerData}
+          nextPrayer={getNextPrayer(prayerData.data?.timings, new Date())}
+          onOpen={() => go("prayer")}
+        />
         {install && view === "home" && (
           <div className="install">
             <div>
@@ -1678,9 +1795,8 @@ function App() {
           [Home, "Home", "home"],
           [BookOpen, "Quran", "quran"],
           [Heart, "Hadith", "hadith"],
-          [Library, "Books", "library"],
-          [Hand, "Tasbeeh", "tasbeeh"],
-          [Settings, "Profile", "profile"],
+          [Hand, "Ibadat", "ibadat"],
+          [Settings, "More", "more"],
         ].map(([Icon, label, id]) => (
           <button
             key={id}
@@ -1724,17 +1840,10 @@ function App() {
           }}
         />
       )}
-      {authReady && !showInstallGate && showOnboarding && !user && (
-        <Onboarding
-          onLogin={() => {
-            setAuthMode("login");
-            setAuthOpen(true);
-          }}
-          onSignup={() => {
-            setAuthMode("signup");
-            setAuthOpen(true);
-          }}
-          onGuest={() => {
+      {authReady && !showInstallGate && showOnboarding && (
+        <EnhancedOnboarding
+          onDone={(selectedFiqh) => {
+            setFiqh(selectedFiqh);
             localStorage.setItem("sakinah-onboarded", "1");
             setShowOnboarding(false);
           }}
