@@ -1,4 +1,4 @@
-const CACHE = "sakinah-v9";
+const CACHE = "sakinah-v10";
 const CORE = [
   "/",
   "/manifest.webmanifest",
@@ -6,7 +6,7 @@ const CORE = [
   "/icons/icon-512.png",
 ];
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
 });
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();

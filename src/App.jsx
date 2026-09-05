@@ -952,19 +952,18 @@ function LibraryView() {
       </p>
       <div className="book-grid">
         {hadithCollections.map((b) => (
-          <article key={b.id}>
-            <div className="book-cover" style={{ background: b.color }}>
-              <span>{b.arabic}</span>
-              <b>{b.name}</b>
-              <small>{b.author}</small>
-            </div>
-            <span>HADITH COLLECTION</span>
-            <h3>{b.name}</h3>
-            <p>{b.count.toLocaleString()} narrations</p>
-            <button onClick={() => setSelected(b)}>
-              Open collection <ChevronRight />
-            </button>
-          </article>
+          <button className="book-card-button" key={b.id} onClick={() => setSelected(b)} aria-label={`Open ${b.name} topics`}>
+            <article>
+              <div className="book-cover" style={{ background: b.color }}>
+                <span>{b.arabic}</span>
+                <b>{b.name}</b>
+                <small>{b.author}</small>
+              </div>
+              <span>HADITH COLLECTION</span>
+              <h3>{b.name}</h3>
+              <p>{b.count.toLocaleString()} narrations · tap for topics</p>
+            </article>
+          </button>
         ))}
       </div>
     </>
@@ -1692,7 +1691,7 @@ function usePrayerScheduler() {
     const schedule = () => {
       timers.forEach(clearTimeout);
       timers = [];
-      if (Notification.permission !== "granted") return;
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
       let saved;
       try {
         saved = JSON.parse(localStorage.getItem("prayer-reminder-settings"));
@@ -1741,6 +1740,7 @@ function App() {
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     window.navigator.standalone === true;
+  console.info("[Sakinah] display mode", { standalone: isStandalone, navigatorStandalone: window.navigator.standalone === true, source: params.get("source") });
   const [view, setView] = useState(params.get("view") || "home"),
     [dark, setDark] = useStored("dark-mode", params.get("theme") === "dark"),
     [fiqh, setFiqh] = useStored("sakinah-fiqh", "hanafi"),

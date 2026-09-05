@@ -2,9 +2,7 @@ import React, { useState } from "react";
 import { X, Mail, Lock, User } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
-const authRedirectUrl = import.meta.env.PROD
-  ? "https://sakinah-islamic.vercel.app/?view=profile"
-  : `${window.location.origin}/?view=profile`;
+const authRedirectUrl = `${window.location.origin}/?view=profile`;
 export default function AuthModal({ close, initialMode = "login" }) {
   const [mode, setMode] = useState(initialMode),
     [name, setName] = useState(""),
@@ -17,6 +15,7 @@ export default function AuthModal({ close, initialMode = "login" }) {
       return setMessage("Supabase credentials are not configured yet.");
     setBusy(true);
     setMessage("");
+    console.info("[Sakinah Auth] OAuth redirect", { redirect: authRedirectUrl, origin: window.location.origin });
     let data;
     let error;
     try {
@@ -48,34 +47,31 @@ export default function AuthModal({ close, initialMode = "login" }) {
   };
   const run = async (e) => {
     e.preventDefault();
-    if (!isSupabaseConfigured)
-      return setMessage("Supabase credentials are not configured yet.");
+    if (!isSupabaseConfigured) return setMessage("Supabase credentials are not configured yet.");
     setBusy(true);
     setMessage("");
-    let error;
-    let data;
-    if (mode === "signup")
-      ({ data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name }, emailRedirectTo: authRedirectUrl },
-      }));
-    else if (mode === "reset")
-      ({ error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: authRedirectUrl,
-      }));
-    else
-      ({ error } = await supabase.auth.signInWithPassword({ email, password }));
-    setBusy(false);
-    if (error) setMessage(error.message);
-    else if (mode === "login" || (mode === "signup" && data?.session)) close();
-    else if (mode === "signup")
-      setMessage(
-        "Email confirmation is still enabled in Supabase. Turn off Confirm email to create accounts instantly.",
-      );
-    else setMessage("Password-reset email sent.");
-  };
-  return (
+    console.info("[Sakinah Auth] request", { mode, redirect: authRedirectUrl, origin: window.location.origin });
+    try {
+      let result;
+      if (mode === "signup") {
+        result = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim() }, emailRedirectTo: authRedirectUrl } });
+      } else if (mode === "reset") {
+        result = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: authRedirectUrl });
+      } else {
+        result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      }
+      console.info("[Sakinah Auth] response", { mode, success: !result.error, hasSession: Boolean(result.data?.session), userId: result.data?.user?.id || null });
+      if (result.error) throw result.error;
+      if (mode === "reset") setMessage("Password-reset email sent. Check your inbox and spam folder.");
+      else if (mode === "signup" && !result.data?.session) setMessage("Account created. Check your inbox and spam folder for the confirmation link.");
+      else close();
+    } catch (reason) {
+      console.error("[Sakinah Auth] failure", { mode, message: reason?.message, status: reason?.status, code: reason?.code });
+      setMessage(reason?.message || "Authentication failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };  return (
     <div className="modal-backdrop">
       <section className="auth-modal">
         <button className="modal-close" onClick={close}>
