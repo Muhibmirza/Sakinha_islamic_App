@@ -324,6 +324,41 @@ async function shareCard(title, text, imageUrl) {
     else await navigator.clipboard?.writeText(fallback);
   }
 }
+function FlashCard({ title, text, image, variant = "gallery" }) {
+  const [imageState, setImageState] = useState("loading");
+  useEffect(() => {
+    let active = true;
+    setImageState("loading");
+    const preload = new Image();
+    preload.decoding = "async";
+    preload.onload = () => {
+      if (!active) return;
+      const decoded = typeof preload.decode === "function" ? preload.decode() : Promise.resolve();
+      decoded.catch(() => undefined).then(() => active && setImageState("ready"));
+    };
+    preload.onerror = () => active && setImageState("error");
+    preload.src = image;
+    return () => { active = false; };
+  }, [image]);
+  const ready = imageState === "ready";
+  const failed = imageState === "error";
+  const gradient = variant === "strip"
+    ? "linear-gradient(0deg,rgba(4,28,17,.8),rgba(4,28,17,.1))"
+    : "linear-gradient(0deg,rgba(4,28,17,.85),transparent)";
+  return (
+    <article className={`flash-card ${ready ? "image-ready" : failed ? "image-error" : "image-loading"}`}
+      style={{ backgroundImage: ready ? `${gradient},url(${image})` : gradient }} aria-busy={!ready && !failed}>
+      {!ready && !failed && <span className="flash-skeleton" aria-label="Loading image" />}
+      <div className="flash-card-content">
+        <img className="flash-watermark" src="/icons/icon-192.png" alt="Sakinah" width="34" height="34" loading="lazy" />
+        <span>{title}</span><p>{text}</p>
+        <button onClick={() => shareCard(title, text, image)} aria-label={`Share ${title}`}>
+          <Share2 />{variant === "gallery" ? " Share" : ""}
+        </button>
+      </div>
+    </article>
+  );
+}
 export function EnhancedHome({ go, user }) {
   const [language, setLanguage] = useState("ur");
   const [query, setQuery] = useState("");
@@ -391,20 +426,7 @@ export function EnhancedHome({ go, user }) {
       </div>
       <div className="flash-strip">
         {flashes.slice(0, 6).map(([title, text, image]) => (
-          <article
-            style={{
-              backgroundImage: `linear-gradient(0deg,rgba(4,28,17,.8),rgba(4,28,17,.1)),url(${image})`,
-            }}
-            key={title}
-            loading="lazy"
-          >
-            <img className="flash-watermark" src="/icons/icon-192.png" alt="Sakinah" />
-            <span>{title}</span>
-            <p>{text}</p>
-            <button onClick={() => shareCard(title, text, image)}>
-              <Share2 />
-            </button>
-          </article>
+          <FlashCard key={title} title={title} text={text} image={image} variant="strip" />
         ))}
       </div>
       <div className="quick-four">
@@ -443,20 +465,7 @@ export function FlashesView() {
       </div>
       <div className="flash-gallery">
         {flashes.map(([title, text, image], i) => (
-          <article
-            style={{
-              backgroundImage: `linear-gradient(0deg,rgba(4,28,17,.85),transparent),url(${image})`,
-            }}
-            key={i}
-            loading="lazy"
-          >
-            <img className="flash-watermark" src="/icons/icon-192.png" alt="Sakinah" />
-            <span>{title}</span>
-            <p>{text}</p>
-            <button onClick={() => shareCard(title, text, image)}>
-              <Share2 /> Share
-            </button>
-          </article>
+          <FlashCard key={i} title={title} text={text} image={image} />
         ))}
       </div>
     </>

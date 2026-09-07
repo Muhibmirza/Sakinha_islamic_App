@@ -43,9 +43,9 @@ if ("serviceWorker" in navigator) {
             window.dispatchEvent(new Event("sakinah-update-ready"));
         });
       });
-      let reloading = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (!reloading) { reloading = true; location.reload(); }
+        // Avoid mixing old and new bundles through a forced mid-render reload.
+        console.info("[Sakinah] update activated; it will be used on next launch");
       });
     } catch (error) {
       console.error("[Sakinah] service worker registration failed", error);
