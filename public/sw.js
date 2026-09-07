@@ -1,4 +1,4 @@
-const VERSION = "v13";
+const VERSION = "v14";
 const PREFIX = "sakinah-";
 const SHELL_CACHE = `${PREFIX}shell-${VERSION}`;
 const CODE_CACHE = `${PREFIX}code-${VERSION}`;

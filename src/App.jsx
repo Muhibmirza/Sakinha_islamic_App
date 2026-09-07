@@ -26,6 +26,10 @@ import {
   X,
   Check,
   Share2,
+  Menu,
+  User,
+  MessageCircle,
+  HelpCircle,
 } from "lucide-react";
 import AuthModal from "./components/AuthModal";
 const SeerahSeries = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.SeerahSeries })));
@@ -251,6 +255,13 @@ function AppSidebar({ open, close, user, openAuth, dark, setDark, go }) {
   const [autoHijri, setAutoHijri] = useStored("auto-hijri-adjust", true);
   const [feedback, setFeedback] = useState("");
   const [sent, setSent] = useState(false);
+  let notificationLog = [];
+  try {
+    const savedLog = JSON.parse(localStorage.getItem("sakinah-notification-log") || "[]");
+    notificationLog = Array.isArray(savedLog) ? savedLog : [];
+  } catch {
+    notificationLog = [];
+  }
   const enableDaily = async () => {
     if (!daily && "Notification" in window) {
       const permission = await Notification.requestPermission();
@@ -263,7 +274,7 @@ function AppSidebar({ open, close, user, openAuth, dark, setDark, go }) {
   return <>{open && <button className="sidebar-shade" aria-label="Close menu" onClick={close}/>}<aside className={`app-sidebar ${open ? "open" : ""}`} aria-hidden={!open}>
     <header><img src="/icons/icon-192.png"/><div><b>Sakinah</b><small>{user?.email || "Guest account"}</small></div><button onClick={close}><X/></button></header>
     <button className="sidebar-account" onClick={() => { close(); user ? navigate("profile") : openAuth(); }}><User/><span><b>{user?.user_metadata?.name || "Account"}</b><small>{user ? "View profile and saved data" : "Sign up, log in or use Google"}</small></span><ChevronRight/></button>
-    <section><h3><Bell/> Notifications</h3><label><span>Daily Ayah or Hadith<small>One rotating reminder each day</small></span><input type="checkbox" checked={daily} onChange={enableDaily}/></label><label><span>All app notifications</span><input type="checkbox" checked={general} onChange={() => setGeneral(!general)}/></label><div className="notification-log">{JSON.parse(localStorage.getItem("sakinah-notification-log") || "[]").slice(0,5).map((item,i)=><p key={i}>{item.text}<small>{item.date}</small></p>)}{!localStorage.getItem("sakinah-notification-log")&&<small>No notifications sent yet.</small>}</div></section>
+    <section><h3><Bell/> Notifications</h3><label><span>Daily Ayah or Hadith<small>One rotating reminder each day</small></span><input type="checkbox" checked={daily} onChange={enableDaily}/></label><label><span>All app notifications</span><input type="checkbox" checked={general} onChange={() => setGeneral(!general)}/></label><div className="notification-log">{notificationLog.slice(0,5).map((item,i)=><p key={i}>{item.text}<small>{item.date}</small></p>)}{notificationLog.length === 0 && <small>No notifications sent yet.</small>}</div></section>
     <section><h3><Settings/> Settings</h3><label><span>Dark mode</span><input type="checkbox" checked={dark} onChange={() => setDark(!dark)}/></label><label><span>Language</span><select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="ur">Urdu</option></select></label><label><span>Auto Hijri adjustment</span><input type="checkbox" checked={autoHijri} onChange={()=>setAutoHijri(!autoHijri)}/></label></section>
     <a className="sidebar-link" href="https://wa.me/923012588832" target="_blank" rel="noreferrer"><MessageCircle/> WhatsApp Support</a>
     <section><h3>Feedback</h3><textarea value={feedback} onChange={e=>setFeedback(e.target.value)} placeholder="Tell us what we can improve"/><button className="sidebar-submit" onClick={()=>{if(feedback.trim()){localStorage.setItem("sakinah-feedback",feedback);setFeedback("");setSent(true)}}}>{sent?"Thank you":"Submit feedback"}</button></section>
@@ -1834,6 +1845,7 @@ function App() {
         title={view === "home" ? null : names[view]}
         back={view !== "home"}
         onBack={() => go("home")}
+        onMenu={() => setSidebarOpen(true)}
         dark={dark}
         setDark={setDark}
         user={user}
