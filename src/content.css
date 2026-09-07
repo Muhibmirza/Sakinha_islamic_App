@@ -5,3 +5,11 @@
 .juz-grid strong{font:600 18px/1.5 'Noto Naskh Arabic';color:var(--green2);margin-top:3px}
 
 .book-card-button{border:0;background:none;color:var(--text);padding:0;text-align:left;width:100%}.book-card-button article{width:100%}.book-card-button:active{transform:scale(.98)}
+
+.topic-language{display:flex;justify-content:flex-end;gap:6px;margin:10px 0}.topic-language button{border:1px solid var(--line);background:var(--card);color:var(--muted);padding:7px 12px;border-radius:9px;font-size:10px}.topic-language .active{background:var(--green);color:#fff}
+
+.surah-row{display:flex;align-items:center;border-bottom:1px solid var(--line)}.surah-open{border:0!important;border-bottom:0!important;flex:1}.surah-heart{border:0;background:none;color:var(--gold);padding:12px}.surah-heart svg{width:19px}.ayah-meta button svg{width:18px}
+
+.hadith-actions{position:absolute;right:10px;top:9px;display:flex;gap:2px}.hadith-feed .hadith-actions button{position:static;padding:5px}.hadith-actions svg{width:16px}
+
+.target-ayah{background:color-mix(in srgb,var(--gold) 12%,var(--card));border:1px solid var(--gold);border-radius:12px;padding:18px 10px}

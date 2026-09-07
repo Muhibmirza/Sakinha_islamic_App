@@ -1,0 +1,39 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { BookOpen, ChevronLeft, ChevronRight, Headphones, Play, Search, Video } from "lucide-react";
+import { getSurah, getSurahs } from "../lib/islamicApi";
+
+const PLAYLIST = "PLW7-5eCq8IySZOYczT-Z9-vFIBWNH5UMT";
+const seasons = [
+  ["Origins & Arabia", ["Why Seerah matters", "Arabia before Islam", "The blessed lineage"]],
+  ["Birth & Early Life", ["The Year of the Elephant", "Childhood and youth", "Al-Amin: the trustworthy"]],
+  ["First Revelation", ["Cave Hira", "The first believers", "The private call"]],
+  ["The Makkan Years", ["Public preaching", "Trials and patience", "The journey to Ta'if"]],
+  ["Hijrah & Madinah", ["The pledge of Aqabah", "The blessed migration", "Building the community"]],
+  ["Major Events", ["Badr", "Uhud", "The Treaty of Hudaybiyyah"]],
+  ["Victory & Legacy", ["The conquest of Makkah", "The farewell sermon", "The lasting legacy"]],
+];
+export function SeerahSeries() {
+  const [season, setSeason] = useState(null);
+  const [episode, setEpisode] = useState(null);
+  if (season == null) return <><header className="extra-title"><Video/><div><small>SEERAT-UN-NABI ﷺ</small><h2>Seven-season video journey</h2></div></header><div className="season-grid">{seasons.map(([title, videos], index)=><button key={title} onClick={()=>setSeason(index)}><b>Season {index+1}</b><span>{title}</span><small>{videos.length} guided episodes</small><ChevronRight/></button>)}</div></>;
+  const chosen=seasons[season];
+  return <><header className="reader-head"><button onClick={()=>{setSeason(null);setEpisode(null)}}><ChevronLeft/></button><div><h2>Season {season+1}</h2><span>{chosen[0]}</span></div></header>{episode!=null&&<div className="video-frame"><iframe src={`https://www.youtube-nocookie.com/embed/videoseries?list=${PLAYLIST}&index=${season*3+episode}`} title={chosen[1][episode]} allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen/></div>}<div className="lesson-list">{chosen[1].map((title,index)=><button key={title} onClick={()=>setEpisode(index)}><Play/><span><b>Episode {season*3+index+1}</b><small>{title}</small></span></button>)}</div><p className="note">Video source: Mufti Menk, The Life of Prophet Muhammad ﷺ series.</p></>;
+}
+
+export function RecitationLibrary() {
+  const [surahs,setSurahs]=useState([]),[selected,setSelected]=useState(null),[audio,setAudio]=useState([]),[loading,setLoading]=useState(true);
+  useEffect(()=>{getSurahs().then(setSurahs).finally(()=>setLoading(false))},[]);
+  const open=async surah=>{setSelected(surah);setLoading(true);const editions=await getSurah(surah.number);setAudio(editions[3]?.ayahs||[]);setLoading(false)};
+  if(selected)return <><header className="reader-head"><button onClick={()=>setSelected(null)}><ChevronLeft/></button><div><h2>{selected.englishName}</h2><span>Ayah-by-ayah recitation</span></div></header>{loading?<p className="note">Loading recitation…</p>:<div className="lesson-list">{audio.map(ayah=><button key={ayah.number} onClick={()=>new Audio(ayah.audio).play()}><Play/><span><b>Ayah {ayah.numberInSurah}</b><small>Play recitation</small></span></button>)}</div>}</>;
+  return <><header className="extra-title"><Headphones/><div><small>RECITATION</small><h2>Listen by Surah or Ayah</h2></div></header>{loading?<p className="note">Loading 114 Surahs…</p>:<div className="compact-list">{surahs.map(s=><button key={s.number} onClick={()=>open(s)}><b>{s.number}</b><span>{s.englishName}<small>{s.numberOfAyahs} ayahs</small></span><ChevronRight/></button>)}</div>}</>;
+}
+
+const subjects = [
+ ["Marriage & Nikah","30:21,4:1,4:19"],["Patience","2:153,2:155,39:10"],["Parents","17:23,31:14,46:15"],["Business dealings","2:275,2:282,4:29"],["Charity","2:261,2:274,9:60"],["Prayer","2:43,4:103,29:45"],["Fasting","2:183,2:185,2:187"],["Hajj","2:196,3:97,22:27"],["Justice","4:135,5:8,16:90"],["Forgiveness","3:134,39:53,42:40"],["Gratitude","14:7,31:12,34:13"],["Trust in Allah","3:159,8:2,65:3"],["Knowledge","20:114,39:9,58:11"],["Family","25:74,30:21,66:6"],["Children","18:46,25:74,64:15"],["Neighbors","4:36,24:27,49:13"],["Honesty","9:119,33:70,61:2"],["Backbiting","49:12,104:1,24:15"],["Modesty","24:30,24:31,33:59"],["Food & halal","2:168,5:3,16:114"],["Debt","2:280,2:282,5:1"],["Inheritance","4:7,4:11,4:12"],["Divorce","2:229,2:231,65:1"],["Orphans","4:2,4:10,93:9"],["Poverty","2:273,9:60,59:8"],["Illness & healing","10:57,17:82,26:80"],["Anxiety & hope","2:286,13:28,94:5"],["Death","3:185,21:35,29:57"],["Hereafter","2:281,75:1,99:6"],["Repentance","4:17,25:70,66:8"],["Dua","2:186,7:55,40:60"],["Unity","3:103,8:46,49:10"],["Mercy","7:156,21:107,39:53"],["Environment","6:141,7:31,30:41"],["Travel","4:101,16:15,67:15"],["Peace","2:208,8:61,49:9"],
+];
+export function QuranSubjects({onOpenAyah}) { const [q,setQ]=useState(""); const shown=useMemo(()=>subjects.filter(x=>x[0].toLowerCase().includes(q.toLowerCase())),[q]); return <><header className="extra-title"><Search/><div><small>TOPICAL INDEX</small><h2>Quran for everyday life</h2></div></header><label className="global-search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search 36 subjects"/></label><div className="subject-list">{shown.map(([title,refs])=><article key={title}><b>{title}</b><div>{refs.split(",").map(ref=><button key={ref} onClick={()=>onOpenAyah(ref)}>{ref}</button>)}</div></article>)}</div></> }
+
+const lessonRefs=["1:1","1:2","1:3","1:4","1:5","1:6","1:7","2:21","2:22","2:152","2:153","2:186","2:255","2:286","3:8","3:26","3:102","3:159","4:1","4:36","5:8","5:90","6:162","7:23","9:51","12:87","13:28","14:7","16:90","17:23","18:10","20:114","24:35","25:74","33:56","39:53","49:13","94:5"];
+export function FahmCourse({onOpenAyah}) { const [open,setOpen]=useState(null),[ayah,setAyah]=useState(null); const openLesson=async i=>{setOpen(i);setAyah(null);const [surah,verse]=lessonRefs[i].split(":").map(Number);const data=await getSurah(surah);setAyah({arabic:data[0].ayahs[verse-1],english:data[1].ayahs[verse-1],audio:data[3].ayahs[verse-1]})}; return <><header className="extra-title"><BookOpen/><div><small>38-LESSON COURSE</small><h2>Fahm-ul-Quran</h2></div></header>{["Beginner","Intermediate","Advanced"].map((level,levelIndex)=><section className="course-level" key={level}><h3>{level}</h3>{lessonRefs.slice(levelIndex===0?0:levelIndex===1?13:26,levelIndex===0?13:levelIndex===1?26:38).map((ref,j)=>{const i=(levelIndex===0?0:levelIndex===1?13:26)+j;return <article key={ref}><button onClick={()=>openLesson(i)}><b>Lesson {i+1}</b><span>Study Quran {ref}</span><ChevronRight/></button>{open===i&&<div className="course-ayah">{ayah?<><p className="arabic">{ayah.arabic?.text}</p><p>{ayah.english?.text}</p><div><button onClick={()=>new Audio(ayah.audio?.audio).play()}><Play/> Recite</button><button onClick={()=>onOpenAyah(ref)}><Search/> Open ayah</button></div></>:<small>Loading ayah…</small>}</div>}</article>})}</section>)}</> }
+
+export function LineMushaf({lines}) { const [page,setPage]=useState(1),[data,setData]=useState(null); useEffect(()=>{fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`).then(r=>r.json()).then(x=>setData(x.data))},[page]); return <><header className="extra-title"><BookOpen/><div><small>INDOPAK READER</small><h2>{lines}-Line Quran</h2></div></header><div className={`mushaf-page lines-${lines}`}>{data?.ayahs?.map(a=><p className="arabic" key={a.number}>{a.text} <i>{a.numberInSurah}</i></p>)}</div><div className="page-controls"><button disabled={page===1} onClick={()=>setPage(page-1)}><ChevronLeft/> Previous</button><b>Page {page} / 604</b><button disabled={page===604} onClick={()=>setPage(page+1)}>Next <ChevronRight/></button></div><p className="note">Continuous Mushaf page reader with {lines}-line reading mode.</p></> }

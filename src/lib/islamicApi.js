@@ -81,6 +81,17 @@ export const hadithCollections = [
     arabic: "جامع الترمذي",
     count: 3956,
     color: "#61435A",
+  },  {
+    id: "eng-nasai", name: "Sunan an-Nasa'i", author: "Imam an-Nasa'i", arabic: "سنن النسائي", count: 5761, color: "#355C5A",
+  },
+  {
+    id: "eng-ibnmajah", name: "Sunan Ibn Majah", author: "Imam Ibn Majah", arabic: "سنن ابن ماجه", count: 4341, color: "#66563B",
+  },
+  {
+    id: "eng-malik", name: "Muwatta Imam Malik", author: "Imam Malik ibn Anas", arabic: "موطأ الإمام مالك", count: 1832, color: "#405A72",
+  },
+  {
+    id: "eng-nawawi", name: "Forty Hadith an-Nawawi", author: "Imam an-Nawawi", arabic: "الأربعون النووية", count: 42, color: "#4E526F",
   },
 ];
 async function hadithFetch(path) {

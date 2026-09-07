@@ -28,6 +28,7 @@ import {
   Share2,
 } from "lucide-react";
 import AuthModal from "./components/AuthModal";
+import { SeerahSeries, RecitationLibrary, QuranSubjects, FahmCourse, LineMushaf } from "./components/QuranExtras";
 import {
   EnhancedOnboarding,
   PersistentPrayer,
@@ -526,8 +527,19 @@ function QuranView({ user }) {
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const [marks, setMarks] = useStored("bookmarks", []);
+  const [favorites, setFavorites] = useStored("quran-favorites", []);
   const [readerPrefs, setReaderPrefs] = useStored("quran-reader-prefs", { fontSize: 30, font: "Noto Naskh Arabic", color: "#0F5132" });
   useEffect(() => {
+    if (!user || !supabase) return;
+    supabase.from("bookmarks").select("reference,payload").eq("kind", "ayah").then(({ data, error }) => {
+      if (error) { console.error("[Sakinah Quran] saved items load failed", error); return; }
+      const rows = data || [];
+      const remoteFavorites = rows.filter((row) => row.reference.startsWith("favorite:")).map((row) => row.payload).filter(Boolean);
+      const remoteMarks = rows.filter((row) => !row.reference.startsWith("favorite:")).map((row) => row.reference);
+      setFavorites((local) => [...local, ...remoteFavorites.filter((item) => !local.some((saved) => saved.reference === item.reference))]);
+      setMarks((local) => [...new Set([...local, ...remoteMarks])]);
+    });
+  }, [user]);  useEffect(() => {
     getSurahs()
       .then(setList)
       .catch((e) => {
@@ -556,7 +568,16 @@ function QuranView({ user }) {
       setLoading(false);
     }
   };
-  const toggleMark = async (id, ayah) => {
+  const toggleFavorite = async (item) => {
+    const exists = favorites.some((saved) => saved.reference === item.reference);
+    const next = exists ? favorites.filter((saved) => saved.reference !== item.reference) : [...favorites, item];
+    setFavorites(next);
+    if (user && supabase) {
+      const reference = `favorite:${item.reference}`;
+      if (exists) await supabase.from("bookmarks").delete().eq("kind", "ayah").eq("reference", reference);
+      else await supabase.from("bookmarks").upsert({ user_id: user.id, kind: "ayah", reference, payload: item });
+    }
+  };  const toggleMark = async (id, ayah) => {
     const marked = marks.includes(id);
     setMarks(marked ? marks.filter((x) => x !== id) : [...marks, id]);
     if (user && supabase) {
@@ -605,7 +626,7 @@ function QuranView({ user }) {
             const id = `${selected.number}:${a.numberInSurah}`,
               marked = marks.includes(id);
             return (
-              <article className="ayah" key={id}>
+              <article className={`ayah ${targetAyah === id ? "target-ayah" : ""}`} key={id} ref={(node) => { if (node && targetAyah === id) setTimeout(() => node.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }}>
                 <div className="ayah-meta">
                   <span>{id}</span>
                   <div>
@@ -615,7 +636,10 @@ function QuranView({ user }) {
                     >
                       ▶
                     </button>
-                    <button onClick={() => toggleMark(id, a.text)}>
+                    <button aria-label="Favorite ayah" onClick={() => toggleFavorite({ type: "Ayah", reference: id, title: `${selected.englishName} ${a.numberInSurah}`, text: a.text })}>
+                      <Heart fill={favorites.some((saved) => saved.reference === id) ? "currentColor" : "none"} />
+                    </button>
+                    <button aria-label="Save last read position" onClick={() => toggleMark(id, a.text)}>
                       {marked ? <BookmarkCheck /> : <Bookmark />}
                     </button>
                   </div>
@@ -655,19 +679,16 @@ function QuranView({ user }) {
         <Empty text="Loading the Quran…" />
       ) : (
         <div className="surah-list">
-          {filtered.map((s) => (
-            <button key={s.number} onClick={() => open(s)}>
-              <span className="surah-no">{s.number}</span>
-              <div>
-                <b>{s.englishName}</b>
-                <small>
-                  {s.englishNameTranslation} · {s.numberOfAyahs} Ayahs
-                </small>
-              </div>
-              <strong>{s.name}</strong>
-              <ChevronRight />
-            </button>
-          ))}
+          {filtered.map((surah) => {
+            const reference = `surah:${surah.number}`;
+            const loved = favorites.some((saved) => saved.reference === reference);
+            return <div className="surah-row" key={surah.number}>
+              <button className="surah-open" onClick={() => open(surah)}>
+                <span className="surah-no">{surah.number}</span><div><b>{surah.englishName}</b><small>{surah.englishNameTranslation} · {surah.numberOfAyahs} Ayahs</small></div><strong>{surah.name}</strong><ChevronRight />
+              </button>
+              <button className="surah-heart" aria-label={`Favorite ${surah.englishName}`} onClick={() => toggleFavorite({ type: "Surah", reference, title: surah.englishName })}><Heart fill={loved ? "currentColor" : "none"}/></button>
+            </div>;
+          })}
         </div>
       )}
     </>
@@ -969,12 +990,22 @@ function LibraryView() {
     </>
   );
 }
-function CollectionReader({ collection, close }) {
+function CollectionReader({ collection, close, user = null }) {
   const [data, setData] = useState(null);
   const [topic, setTopic] = useState(null);
   const [language, setLanguage] = useState("ur");
+  const [topicLanguage, setTopicLanguage] = useState("en");
   const [error, setError] = useState("");
-  useEffect(() => {
+  const [savedHadiths, setSavedHadiths] = useStored("hadith-favorites", []);
+  const [lastHadith, setLastHadith] = useStored("last-hadith", null);
+  const toggleHadithFavorite = async (item) => {
+    const exists = savedHadiths.some((saved) => saved.reference === item.reference);
+    setSavedHadiths(exists ? savedHadiths.filter((saved) => saved.reference !== item.reference) : [...savedHadiths, item]);
+    if (user && supabase) {
+      if (exists) await supabase.from("bookmarks").delete().eq("kind", "hadith").eq("reference", item.reference);
+      else await supabase.from("bookmarks").upsert({ user_id: user.id, kind: "hadith", reference: item.reference, payload: item });
+    }
+  };  useEffect(() => {
     setData(null);
     setTopic(null);
     setError("");
@@ -999,13 +1030,19 @@ function CollectionReader({ collection, close }) {
     arabicMap = byNumber(arabic);
   const topics = useMemo(() => {
     const groups = new Map();
-    english.forEach((h) => {
-      const key = String(h.reference?.book || "General");
+    english.forEach((hadith) => {
+      const key = String(hadith.reference?.book || "0");
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(h);
+      groups.get(key).push(hadith);
     });
-    return [...groups.entries()];
-  }, [english]);
+    const englishSections = data?.english?.metadata?.sections || {};
+    const urduSections = data?.urdu?.metadata?.sections || {};
+    return [...groups.entries()].filter(([key]) => key !== "0").map(([key, items]) => ({
+      key, items,
+      englishTitle: englishSections[key] || `Book ${key}`,
+      urduTitle: urduSections[key] || englishSections[key] || `کتاب ${key}`,
+    }));
+  }, [english, data]);
   if (!data)
     return (
       <>
@@ -1037,13 +1074,14 @@ function CollectionReader({ collection, close }) {
             <span>Select a book / topic</span>
           </div>
         </div>
+        <div className="topic-language"><button className={topicLanguage === "ur" ? "active" : ""} onClick={() => setTopicLanguage("ur")}>اردو</button><button className={topicLanguage === "en" ? "active" : ""} onClick={() => setTopicLanguage("en")}>English</button></div>
         <div className="topic-list">
-          {topics.map(([book, items]) => (
-            <button key={book} onClick={() => setTopic({ book, items })}>
-              <span>{book}</span>
+          {topics.map((entry) => (
+            <button key={entry.key} onClick={() => setTopic({ book: entry.key, items: entry.items, title: topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle })}>
+              <span>{entry.key}</span>
               <div>
-                <b>Book {book}</b>
-                <small>{items.length} hadiths</small>
+                <b dir={topicLanguage === "ur" ? "rtl" : "ltr"}>{topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle}</b>
+                <small>{entry.items.length} hadiths · Book {entry.key}</small>
               </div>
               <ChevronRight />
             </button>
@@ -1060,7 +1098,7 @@ function CollectionReader({ collection, close }) {
         <div>
           <h2>{collection.name}</h2>
           <span>
-            Book {topic.book} · {topic.items.length} hadiths
+            {topic.title} · {topic.items.length} hadiths
           </span>
         </div>
         <select value={language} onChange={(e) => setLanguage(e.target.value)}>
@@ -1084,19 +1122,11 @@ function CollectionReader({ collection, close }) {
               <small>
                 Book {h.reference?.book} · Hadith {h.reference?.hadith}
               </small>
-              <button
-                aria-label="Share hadith"
-                onClick={() =>
-                  navigator.share
-                    ? navigator.share({
-                        title: `${collection.name} ${key}`,
-                        text: shown,
-                      })
-                    : navigator.clipboard?.writeText(shown)
-                }
-              >
-                <Share2 />
-              </button>
+              <div className="hadith-actions">
+                <button aria-label="Favorite hadith" onClick={() => toggleHadithFavorite({ reference: `${collection.id}:${key}`, title: `${collection.name} ${key}`, text: shown })}><Heart fill={savedHadiths.some((saved) => saved.reference === `${collection.id}:${key}`) ? "currentColor" : "none"}/></button>
+                <button aria-label="Bookmark hadith" onClick={() => setLastHadith({ reference: `${collection.id}:${key}`, title: `${collection.name} ${key}` })}><BookmarkCheck fill={lastHadith?.reference === `${collection.id}:${key}` ? "currentColor" : "none"}/></button>
+                <button aria-label="Share hadith" onClick={() => navigator.share ? navigator.share({ title: `${collection.name} ${key}`, text: shown }) : navigator.clipboard?.writeText(shown)}><Share2 /></button>
+              </div>
             </article>
           );
         })}
@@ -1114,7 +1144,7 @@ function HadithView({ user }) {
   }, []);
   if (selected)
     return (
-      <CollectionReader collection={selected} close={() => setSelected(null)} />
+      <CollectionReader collection={selected} close={() => setSelected(null)} user={user} />
     );
   return (
     <>
@@ -1286,105 +1316,31 @@ function ProfileView({ user, openAuth }) {
 function QuranExperience({ user }) {
   const [mode, setMode] = useState("alquran");
   const [reader, setReader] = useState("juz");
-  const [lesson, setLesson] = useState(null);
-  const study = {
-    fahm: {
-      eyebrow: "FAHM-UL-QURAN",
-      title: "Reflect with context.",
-      cards: [
-        [
-          "Theme and setting",
-          "Learn when a passage was revealed and its central message.",
-        ],
-        ["Vocabulary", "Explore important Quranic words and recurring roots."],
-        [
-          "Reflection",
-          "Read concise study prompts alongside the original ayah.",
-        ],
-      ],
-    },
-    understand: {
-      eyebrow: "UNDERSTAND QURAN",
-      title: "Build understanding steadily.",
-      cards: [
-        [
-          "Quranic Arabic",
-          "Recognize high-frequency words used throughout the Quran.",
-        ],
-        [
-          "Study plans",
-          "Follow short daily lessons and preserve your progress.",
-        ],
-        ["Practice", "Review meanings before moving to the next lesson."],
-      ],
-    },
+  const openAyah = (reference) => {
+    localStorage.setItem("sakinah-quran-target", reference);
+    setMode("alquran");
+    setReader("surah");
   };
+  const tabs = [
+    ["alquran", "Al-Quran"], ["seerah", "Seerat-un-Nabi"], ["15line", "15-Line"],
+    ["16line", "16-Line"], ["recitation", "Recitation"], ["subjects", "Subjects"], ["fahm", "Fahm-ul-Quran"],
+  ];
   return (
     <>
-      <div className="quran-modes">
-        <button
-          className={mode === "alquran" ? "active" : ""}
-          onClick={() => setMode("alquran")}
-        >
-          Al-Quran
-        </button>
-        <button
-          className={mode === "fahm" ? "active" : ""}
-          onClick={() => setMode("fahm")}
-        >
-          Fahm-ul-Quran
-        </button>
-        <button
-          className={mode === "understand" ? "active" : ""}
-          onClick={() => setMode("understand")}
-        >
-          Understand Quran
-        </button>
-      </div>
-      {mode === "alquran" ? (
-        <>
-          <div className="reader-switch">
-            <button
-              className={reader === "juz" ? "active" : ""}
-              onClick={() => setReader("juz")}
-            >
-              30 Juz / Para
-            </button>
-            <button
-              className={reader === "surah" ? "active" : ""}
-              onClick={() => setReader("surah")}
-            >
-              114 Surahs
-            </button>
-          </div>
-          {reader === "juz" ? <JuzBrowser /> : <QuranView user={user} />}
-        </>
-      ) : (
-        <>
-          <HeroTitle eyebrow={study[mode].eyebrow} title={study[mode].title} />
-          <div className="study-cards">
-            {study[mode].cards.map(([title, text], index) => (
-              <article key={title} role="button" tabIndex="0" className={lesson === mode + "-" + index ? "open" : ""} onClick={() => setLesson(lesson === mode + "-" + index ? null : mode + "-" + index)}>
-                <span>{index + 1}</span>
-                <div>
-                  <b>{title}</b>
-                  <p>{text}</p>
-                  {lesson === mode + "-" + index && (
-                    <div className="lesson-content"><b>Lesson {index + 1}</b><p>{mode === "fahm" ? "Read the passage with its revelation setting, key vocabulary and a concise reflection prompt. Save one insight and revisit the ayah in context." : "Study a small group of high-frequency Quranic words, review their meanings, then identify them in the original Arabic text."}</p></div>
-                  )}
-                </div>
-                <ChevronRight />
-              </article>
-            ))}
-          </div>
-          <p className="note">
-            Study summaries support reflection and do not replace qualified
-            tafsir or a teacher.
-          </p>
-        </>
-      )}
+      <div className="quran-modes quran-modes-scroll">{tabs.map(([id,label])=><button key={id} className={mode===id?"active":""} onClick={()=>setMode(id)}>{label}</button>)}</div>
+      {mode === "alquran" && <><div className="reader-switch"><button className={reader === "juz" ? "active" : ""} onClick={() => setReader("juz")}>30 Juz / Para</button><button className={reader === "surah" ? "active" : ""} onClick={() => setReader("surah")}>114 Surahs</button><button className={reader === "favorites" ? "active" : ""} onClick={() => setReader("favorites")}>My Favorites</button></div>{reader === "juz" ? <JuzBrowser /> : reader === "favorites" ? <QuranFavorites user={user}/> : <QuranView user={user} />}</>}
+      {mode === "seerah" && <SeerahSeries />}
+      {mode === "15line" && <LineMushaf lines={15} />}
+      {mode === "16line" && <LineMushaf lines={16} />}
+      {mode === "recitation" && <RecitationLibrary />}
+      {mode === "subjects" && <QuranSubjects onOpenAyah={openAyah} />}
+      {mode === "fahm" && <FahmCourse onOpenAyah={openAyah} />}
     </>
   );
+}
+function QuranFavorites() {
+  const [favorites] = useStored("quran-favorites", []);
+  return <><HeroTitle eyebrow="SAVED QURAN" title="My Favorites" />{favorites.length?<div className="history">{favorites.map(item=><div key={item.reference}><span><b>{item.title}</b><small>{item.type} · {item.reference}</small></span><Heart/></div>)}</div>:<Empty text="Heart a Surah or Ayah to see it here."/>}</>;
 }
 const JUZ_NAMES = [
   "Alif Lam Meem",
