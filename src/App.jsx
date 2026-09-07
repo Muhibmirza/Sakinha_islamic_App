@@ -51,6 +51,7 @@ import {
   WaqfView,
 } from "./components/Upgrade";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
+import { allowedImageFile, boundedInteger, cleanText } from "./lib/security";
 import {
   getSurahs,
   getSurah,
@@ -739,6 +740,7 @@ function TasbeehView({ user }) {
   const [history, setHistory] = useStored("tasbeeh-history", []);
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [imageError, setImageError] = useState("");
   const [form, setForm] = useState({ title: "", translation: "", target: 33, image: "" });
   const all = [...presets, ...customs];
   const active = all.find((item) => item.id === activeId) || presets[0];
@@ -760,15 +762,31 @@ function TasbeehView({ user }) {
   };
   const chooseImage = (event) => {
     const file = event.target.files?.[0];
+    setImageError("");
     if (!file) return;
+    if (!allowedImageFile(file)) {
+      event.target.value = "";
+      setImageError("Use a JPG, PNG or WebP image smaller than 1.5 MB.");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => setForm((current) => ({ ...current, image: reader.result }));
+    reader.onload = () => {
+      if (typeof reader.result !== "string" || !/^data:image\/(?:jpeg|png|webp);base64,/i.test(reader.result)) {
+        setImageError("This image could not be validated.");
+        return;
+      }
+      setForm((current) => ({ ...current, image: reader.result }));
+    };
+    reader.onerror = () => setImageError("This image could not be read.");
     reader.readAsDataURL(file);
   };
   const create = async (event) => {
     event.preventDefault();
-    if (!form.title.trim() || Number(form.target) < 1) return;
-    const item = { ...form, id: editingId || `custom-${Date.now()}`, title: form.title.trim(), target: Number(form.target), arabic: form.title.trim() };
+    const title = cleanText(form.title, 80);
+    const translation = cleanText(form.translation, 240);
+    const target = boundedInteger(form.target, 1, 100000);
+    if (!title || !target) return;
+    const item = { ...form, id: editingId || `custom-${Date.now()}`, title, translation, target, arabic: title };
     setCustoms(editingId ? customs.map((saved) => saved.id === editingId ? item : saved) : [...customs, item]);
     setActiveId(item.id);
     setCount(0);
@@ -786,10 +804,10 @@ function TasbeehView({ user }) {
       </div>
       {creating && <form className="custom-tasbeeh-form" onSubmit={create}>
         <h3>{editingId ? "Edit My Tasbeeh" : "Create My Tasbeeh"}</h3>
-        <input required placeholder="Zikr title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <input placeholder="Translation" value={form.translation} onChange={(e) => setForm({ ...form, translation: e.target.value })} />
-        <input required type="number" min="1" placeholder="Target count" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
-        <label>Background image <input type="file" accept="image/*" onChange={chooseImage} /></label>
+        <input required maxLength="80" placeholder="Zikr title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <input maxLength="240" placeholder="Translation" value={form.translation} onChange={(e) => setForm({ ...form, translation: e.target.value })} />
+        <input required type="number" min="1" max="100000" placeholder="Target count" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
+        <label>Background image <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} /></label>{imageError && <small className="note" role="alert">{imageError}</small>}
         <div><button type="button" onClick={() => { setCreating(false); setEditingId(null); }}>Cancel</button><button type="submit">{editingId ? "Update Tasbeeh" : "Save Tasbeeh"}</button></div>
       </form>}
       {active.id.startsWith("custom-") && <button className="edit-tasbeeh" onClick={() => { setEditingId(active.id); setForm({ title: active.title, translation: active.translation || "", target: active.target, image: active.image || "" }); setCreating(true); }}><Settings /> Edit this Tasbeeh</button>}

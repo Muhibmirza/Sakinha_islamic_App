@@ -1,4 +1,4 @@
-const VERSION = "v14";
+const VERSION = "v15";
 const PREFIX = "sakinah-";
 const SHELL_CACHE = `${PREFIX}shell-${VERSION}`;
 const CODE_CACHE = `${PREFIX}code-${VERSION}`;
@@ -60,7 +60,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(staleWhileRevalidate(event, IMAGE_CACHE));
     return;
   }
-  if (url.origin !== self.location.origin && ["api.alquran.cloud", "api.aladhan.com"].includes(url.hostname)) {
+  if (url.origin !== self.location.origin && url.hostname === "api.alquran.cloud") {
     event.respondWith(networkFirst(event.request, DATA_CACHE));
     return;
   }

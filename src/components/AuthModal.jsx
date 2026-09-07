@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Mail, Lock, User } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { cleanText, safeAuthMessage, validEmail } from "../lib/security";
 
 const authRedirectUrl = `${window.location.origin}/?view=profile`;
 export default function AuthModal({ close, initialMode = "login" }) {
@@ -10,16 +11,13 @@ export default function AuthModal({ close, initialMode = "login" }) {
     [password, setPassword] = useState(""),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
+
   const google = async () => {
-    if (!isSupabaseConfigured)
-      return setMessage("Supabase credentials are not configured yet.");
+    if (!isSupabaseConfigured) return setMessage("Account services are not configured yet.");
     setBusy(true);
     setMessage("");
-    console.info("[Sakinah Auth] OAuth redirect", { redirect: authRedirectUrl, origin: window.location.origin });
-    let data;
-    let error;
     try {
-      const result = await Promise.race([
+      const { data, error } = await Promise.race([
         supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
@@ -28,139 +26,70 @@ export default function AuthModal({ close, initialMode = "login" }) {
             queryParams: { prompt: "select_account" },
           },
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Google sign-in timed out. Check your connection and try again.")), 15000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("oauth_timeout")), 15000)),
       ]);
-      ({ data, error } = result);
+      if (error || !data?.url) throw error || new Error("missing_oauth_url");
+      const destination = new URL(data.url);
+      const expected = new URL(import.meta.env.VITE_SUPABASE_URL);
+      if (destination.protocol !== "https:" || destination.origin !== expected.origin) throw new Error("invalid_oauth_origin");
+      window.location.assign(destination.href);
     } catch (reason) {
+      console.warn("[Sakinah Auth] Google request failed", { code: reason?.code || "oauth_error" });
       setBusy(false);
-      setMessage(reason.message || "Google sign-in could not start.");
-      return;
+      setMessage("Google sign-in could not start. Please try again.");
     }
-    if (error || !data?.url) {
-      setBusy(false);
-      setMessage(
-        error?.message || "Google sign-in could not start. Please try again.",
-      );
-      return;
-    }
-    window.location.assign(data.url);
   };
-  const run = async (e) => {
-    e.preventDefault();
-    if (!isSupabaseConfigured) return setMessage("Supabase credentials are not configured yet.");
+
+  const run = async (event) => {
+    event.preventDefault();
+    if (!isSupabaseConfigured) return setMessage("Account services are not configured yet.");
     setBusy(true);
     setMessage("");
-    console.info("[Sakinah Auth] request", { mode, redirect: authRedirectUrl, origin: window.location.origin });
+    const normalizedEmail = validEmail(email);
+    const normalizedName = cleanText(name, 80);
+    if (!normalizedEmail || password.length > 128 || (mode === "signup" && (!normalizedName || password.length < 8))) {
+      setBusy(false);
+      setMessage("Please enter valid account details.");
+      return;
+    }
     try {
       let result;
       if (mode === "signup") {
-        result = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { name: name.trim() }, emailRedirectTo: authRedirectUrl } });
+        result = await supabase.auth.signUp({ email: normalizedEmail, password, options: { data: { name: normalizedName }, emailRedirectTo: authRedirectUrl } });
       } else if (mode === "reset") {
-        result = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: authRedirectUrl });
+        result = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: authRedirectUrl });
       } else {
-        result = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        result = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       }
-      console.info("[Sakinah Auth] response", { mode, success: !result.error, hasSession: Boolean(result.data?.session), userId: result.data?.user?.id || null });
       if (result.error) throw result.error;
-      if (mode === "reset") setMessage("Password-reset email sent. Check your inbox and spam folder.");
-      else if (mode === "signup" && !result.data?.session) setMessage("Account created. Check your inbox and spam folder for the confirmation link.");
+      if (mode === "reset") setMessage(safeAuthMessage("reset"));
+      else if (mode === "signup" && !result.data?.session) setMessage("Account created. Check your inbox for the confirmation link.");
       else close();
     } catch (reason) {
-      console.error("[Sakinah Auth] failure", { mode, message: reason?.message, status: reason?.status, code: reason?.code });
-      setMessage(reason?.message || "Authentication failed. Please try again.");
+      console.warn("[Sakinah Auth] request failed", { mode, code: reason?.code || "auth_error" });
+      setMessage(safeAuthMessage(mode));
     } finally {
       setBusy(false);
     }
-  };  return (
+  };
+
+  return (
     <div className="modal-backdrop">
-      <section className="auth-modal">
-        <button className="modal-close" onClick={close}>
-          <X />
-        </button>
-        <img src="/icons/icon-192.png" />
+      <section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <button type="button" className="modal-close" onClick={close} aria-label="Close account dialog"><X /></button>
+        <img src="/icons/icon-192.png" alt="Sakinah" />
         <span>WELCOME TO SAKINAH</span>
-        <h2>
-          {mode === "signup"
-            ? "Create your account"
-            : mode === "reset"
-              ? "Reset your password"
-              : "Peace begins here."}
-        </h2>
-        <p>
-          {mode === "login"
-            ? "Sign in to sync your worship journey across devices."
-            : "Your private spiritual companion."}
-        </p>
+        <h2 id="auth-title">{mode === "signup" ? "Create your account" : mode === "reset" ? "Reset your password" : "Peace begins here."}</h2>
+        <p>{mode === "login" ? "Sign in to sync your worship journey across devices." : "Your private spiritual companion."}</p>
         <form onSubmit={run}>
-          {mode === "signup" && (
-            <label>
-              <User />
-              <input
-                required
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-          )}
-          <label>
-            <Mail />
-            <input
-              required
-              type="email"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          {mode !== "reset" && (
-            <label>
-              <Lock />
-              <input
-                required
-                minLength="8"
-                type="password"
-                placeholder="Password (8+ characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-          )}
-          <button className="auth-primary" disabled={busy}>
-            {busy
-              ? "Please wait…"
-              : mode === "signup"
-                ? "Create account"
-                : mode === "reset"
-                  ? "Send reset link"
-                  : "Sign in"}
-          </button>
+          {mode === "signup" && <label><User /><input required maxLength="80" autoComplete="name" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} /></label>}
+          <label><Mail /><input required type="email" maxLength="254" autoComplete="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          {mode !== "reset" && <label><Lock /><input required minLength="8" maxLength="128" autoComplete={mode === "signup" ? "new-password" : "current-password"} type="password" placeholder="Password (8+ characters)" value={password} onChange={(e) => setPassword(e.target.value)} /></label>}
+          <button className="auth-primary" disabled={busy}>{busy ? "Please wait..." : mode === "signup" ? "Create account" : mode === "reset" ? "Send reset link" : "Sign in"}</button>
         </form>
-        {mode === "login" && (
-          <>
-            <button
-              type="button"
-              className="google-oauth-button"
-              onClick={google}
-              disabled={busy}
-            >
-              <span className="google-mark">G</span>
-              Continue with Google
-            </button>
-            <button className="text-btn" onClick={() => setMode("reset")}>
-              Forgot password?
-            </button>
-          </>
-        )}
-        {message && <div className="auth-message">{message}</div>}
-        <div className="auth-switch">
-          {mode === "signup" ? "Already have an account?" : "New to Sakinah?"}{" "}
-          <button
-            onClick={() => setMode(mode === "signup" ? "login" : "signup")}
-          >
-            {mode === "signup" ? "Sign in" : "Create account"}
-          </button>
-        </div>
+        {mode === "login" && <><button type="button" className="google-oauth-button" onClick={google} disabled={busy}><span className="google-mark">G</span>Continue with Google</button><button type="button" className="text-btn" onClick={() => setMode("reset")}>Forgot password?</button></>}
+        {message && <div className="auth-message" role="status">{message}</div>}
+        <div className="auth-switch">{mode === "signup" ? "Already have an account?" : "New to Sakinah?"}{" "}<button type="button" onClick={() => setMode(mode === "signup" ? "login" : "signup")}>{mode === "signup" ? "Sign in" : "Create account"}</button></div>
       </section>
     </div>
   );

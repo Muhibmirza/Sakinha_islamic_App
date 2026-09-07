@@ -1,3 +1,4 @@
+import { boundedInteger } from "./security";
 const QURAN = "https://api.alquran.cloud/v1";
 export async function getSurahs() {
   const r = await fetch(`${QURAN}/surah`);
@@ -5,6 +6,8 @@ export async function getSurahs() {
   return (await r.json()).data;
 }
 export async function getSurah(number) {
+  number = boundedInteger(number, 1, 114);
+  if (!number) throw new Error("Invalid Surah number");
   const r = await fetch(
     `${QURAN}/surah/${number}/editions/quran-uthmani,en.sahih,ur.jalandhry,ar.alafasy`,
   );
@@ -12,6 +15,9 @@ export async function getSurah(number) {
   return (await r.json()).data;
 }
 export async function getPrayerTimes(latitude, longitude, date = new Date()) {
+  latitude = Number(latitude);
+  longitude = Number(longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !(date instanceof Date) || Number.isNaN(date.getTime())) throw new Error("Invalid prayer-time request");
   const stamp = `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
   const r = await fetch(
     `https://api.aladhan.com/v1/timings/${stamp}?latitude=${latitude}&longitude=${longitude}&method=2&school=0`,
@@ -90,6 +96,7 @@ export const hadithCollections = [
   },
 ];
 async function hadithFetch(path) {
+  if (!/^[a-z0-9-]+(?:\/(?:sections\/)?[0-9]+)?$/.test(path)) throw new Error("Invalid Hadith request");
   let r = await fetch(`${HADITH}/${path}.min.json`);
   if (!r.ok) r = await fetch(`${HADITH}/${path}.json`);
   if (!r.ok) throw new Error("Hadith collection is temporarily unavailable");
@@ -119,6 +126,8 @@ export async function getQuranEditions() {
   );
 }
 export async function getJuz(number, edition = "quran-uthmani") {
+  number = boundedInteger(number, 1, 30);
+  if (!number || !/^[a-z0-9.-]{1,64}$/i.test(edition)) throw new Error("Invalid Juz request");
   const r = await fetch(`${QURAN}/juz/${number}/${edition}`);
   if (!r.ok) throw new Error("Could not load this Juz");
   return (await r.json()).data;
