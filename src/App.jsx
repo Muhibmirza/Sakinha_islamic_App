@@ -28,7 +28,12 @@ import {
   Share2,
 } from "lucide-react";
 import AuthModal from "./components/AuthModal";
-import { SeerahSeries, RecitationLibrary, QuranSubjects, FahmCourse, LineMushaf } from "./components/QuranExtras";
+const SeerahSeries = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.SeerahSeries })));
+const RecitationLibrary = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.RecitationLibrary })));
+const QuranSubjects = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.QuranSubjects })));
+const FahmCourse = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.FahmCourse })));
+const LineMushaf = React.lazy(() => import("./components/QuranExtras").then((m) => ({ default: m.LineMushaf })));
+const LazySection = ({ children }) => <React.Suspense fallback={<div className="empty">Opening section…</div>}>{children}</React.Suspense>;
 import {
   EnhancedOnboarding,
   PersistentPrayer,
@@ -39,7 +44,7 @@ import {
   IbadatView,
   MoreView,
   NamesView,
-  JafriaCatalogue,
+  WaqfView,
 } from "./components/Upgrade";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
 import {
@@ -50,6 +55,7 @@ import {
   hijriToday,
   hadithCollections,
   getHadithCollection,
+  getHadithSection,
   getDailyHadith,
   getQuranEditions,
   getJuz,
@@ -229,41 +235,58 @@ function useStored(key, init) {
   useEffect(() => localStorage.setItem(key, JSON.stringify(v)), [key, v]);
   return [v, setV];
 }
-function Header({ title, back, onBack, dark, setDark, user, onProfile }) {
-  const initials = (user?.user_metadata?.name || user?.email || "Guest")
-    .split(/\s|@/)
-    .map((x) => x[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function Header({ title, back, onBack, onMenu }) {
   return (
     <header className="topbar">
-      {back ? (
-        <button className="icon-btn" onClick={onBack}>
-          <ChevronLeft />
-        </button>
-      ) : (
-        <div className="brand">
-          <img src="/icons/icon-192.png" />
-          <div>
-            <b>Sakinah</b>
-            <span>Islamic Companion</span>
-          </div>
-        </div>
-      )}{" "}
+      {back ? <button className="icon-btn" onClick={onBack}><ChevronLeft /></button> : <div className="brand"><img src="/icons/icon-192.png" alt="Sakinah"/><div><b>Sakinah</b><span>Islamic Companion</span></div></div>}
       {title && <h2>{title}</h2>}
-      <div className="header-actions">
-        <button className="icon-btn" onClick={() => setDark(!dark)}>
-          {dark ? <Sun /> : <Moon />}
-        </button>
-        <button className="avatar" onClick={onProfile}>
-          {initials}
-        </button>
-      </div>
+      <div className="header-actions"><button className="icon-btn menu-button" aria-label="Open menu" onClick={onMenu}><Menu /></button></div>
     </header>
   );
 }
-const PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
+function AppSidebar({ open, close, user, openAuth, dark, setDark, go }) {
+  const [daily, setDaily] = useStored("daily-content-notifications", false);
+  const [general, setGeneral] = useStored("general-notifications", true);
+  const [language, setLanguage] = useStored("app-language", "en");
+  const [autoHijri, setAutoHijri] = useStored("auto-hijri-adjust", true);
+  const [feedback, setFeedback] = useState("");
+  const [sent, setSent] = useState(false);
+  const enableDaily = async () => {
+    if (!daily && "Notification" in window) {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return;
+      try { await (await navigator.serviceWorker.ready).periodicSync?.register("sakinah-daily", { minInterval: 86400000 }); } catch (error) { console.info("[Sakinah] periodic sync unavailable", error); }
+    }
+    setDaily(!daily);
+  };
+  const navigate = (view) => { go(view); close(); };
+  return <>{open && <button className="sidebar-shade" aria-label="Close menu" onClick={close}/>}<aside className={`app-sidebar ${open ? "open" : ""}`} aria-hidden={!open}>
+    <header><img src="/icons/icon-192.png"/><div><b>Sakinah</b><small>{user?.email || "Guest account"}</small></div><button onClick={close}><X/></button></header>
+    <button className="sidebar-account" onClick={() => { close(); user ? navigate("profile") : openAuth(); }}><User/><span><b>{user?.user_metadata?.name || "Account"}</b><small>{user ? "View profile and saved data" : "Sign up, log in or use Google"}</small></span><ChevronRight/></button>
+    <section><h3><Bell/> Notifications</h3><label><span>Daily Ayah or Hadith<small>One rotating reminder each day</small></span><input type="checkbox" checked={daily} onChange={enableDaily}/></label><label><span>All app notifications</span><input type="checkbox" checked={general} onChange={() => setGeneral(!general)}/></label><div className="notification-log">{JSON.parse(localStorage.getItem("sakinah-notification-log") || "[]").slice(0,5).map((item,i)=><p key={i}>{item.text}<small>{item.date}</small></p>)}{!localStorage.getItem("sakinah-notification-log")&&<small>No notifications sent yet.</small>}</div></section>
+    <section><h3><Settings/> Settings</h3><label><span>Dark mode</span><input type="checkbox" checked={dark} onChange={() => setDark(!dark)}/></label><label><span>Language</span><select value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">English</option><option value="ur">Urdu</option></select></label><label><span>Auto Hijri adjustment</span><input type="checkbox" checked={autoHijri} onChange={()=>setAutoHijri(!autoHijri)}/></label></section>
+    <a className="sidebar-link" href="https://wa.me/923012588832" target="_blank" rel="noreferrer"><MessageCircle/> WhatsApp Support</a>
+    <section><h3>Feedback</h3><textarea value={feedback} onChange={e=>setFeedback(e.target.value)} placeholder="Tell us what we can improve"/><button className="sidebar-submit" onClick={()=>{if(feedback.trim()){localStorage.setItem("sakinah-feedback",feedback);setFeedback("");setSent(true)}}}>{sent?"Thank you":"Submit feedback"}</button></section>
+    <details><summary><HelpCircle/> FAQ</summary><p><b>Is Sakinah free?</b><br/>Yes, guest use is free.</p><p><b>Why create an account?</b><br/>It syncs bookmarks and worship history.</p><p><b>How do I update?</b><br/>Installed versions update automatically when reopened.</p></details>
+  </aside></>;
+}
+function useDailyContentNotifications() {
+  useEffect(() => {
+    const send = async () => {
+      if (localStorage.getItem("daily-content-notifications") !== "true" || localStorage.getItem("general-notifications") === "false" || !("Notification" in window) || Notification.permission !== "granted") return;
+      const today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("sakinah-daily-sent") === today) return;
+      const messages = ["Surely, with hardship comes ease. — Quran 94:5","In the remembrance of Allah hearts find comfort. — Quran 13:28","The best among you are those with the best character. — Hadith"];
+      const text = messages[Math.floor(Date.now()/86400000)%messages.length];
+      const registration = await navigator.serviceWorker?.ready;
+      await registration?.showNotification("Daily Sakinah", { body:text, icon:"/icons/icon-192.png", tag:`sakinah-daily-${today}` });
+      localStorage.setItem("sakinah-daily-sent",today);
+      const log=JSON.parse(localStorage.getItem("sakinah-notification-log")||"[]"); localStorage.setItem("sakinah-notification-log",JSON.stringify([{text,date:new Date().toLocaleString()},...log].slice(0,30)));
+    };
+    send();
+    const timer=setInterval(send,3600000); return()=>clearInterval(timer);
+  },[]);
+}const PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"];
 const PRAYER_LABELS = {
   Fajr: "Dawn",
   Dhuhr: "Noon",
@@ -294,7 +317,7 @@ function getNextPrayer(timings, now = new Date()) {
   next.date.setDate(next.date.getDate() + 1);
   return next;
 }
-function useLivePrayerData(fiqh) {
+function useLivePrayerData() {
   const [state, setState] = useState({
     data: null,
     coords: null,
@@ -322,7 +345,6 @@ function useLivePrayerData(fiqh) {
             point.latitude,
             point.longitude,
             new Date(),
-            fiqh,
           );
           setState({ data, coords: point, loading: false, error: "" });
         } catch (error) {
@@ -341,7 +363,7 @@ function useLivePrayerData(fiqh) {
         })),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
-  }, [fiqh]);
+  }, []);
   useEffect(() => {
     refresh();
     const refreshWhenVisible = () => {
@@ -705,6 +727,7 @@ function TasbeehView({ user }) {
   const [count, setCount] = useStored("tasbeeh-count", 0);
   const [history, setHistory] = useStored("tasbeeh-history", []);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ title: "", translation: "", target: 33, image: "" });
   const all = [...presets, ...customs];
   const active = all.find((item) => item.id === activeId) || presets[0];
@@ -734,29 +757,31 @@ function TasbeehView({ user }) {
   const create = async (event) => {
     event.preventDefault();
     if (!form.title.trim() || Number(form.target) < 1) return;
-    const item = { ...form, id: `custom-${Date.now()}`, title: form.title.trim(), target: Number(form.target), arabic: form.title.trim() };
-    setCustoms([...customs, item]);
+    const item = { ...form, id: editingId || `custom-${Date.now()}`, title: form.title.trim(), target: Number(form.target), arabic: form.title.trim() };
+    setCustoms(editingId ? customs.map((saved) => saved.id === editingId ? item : saved) : [...customs, item]);
     setActiveId(item.id);
     setCount(0);
     if (user && supabase) await supabase.from("bookmarks").upsert({ user_id: user.id, kind: "book", reference: `tasbeeh:${item.id}`, payload: item });
     setForm({ title: "", translation: "", target: 33, image: "" });
     setCreating(false);
+    setEditingId(null);
   };
   return (
     <>
       <HeroTitle eyebrow="REMEMBRANCE" title="Find stillness in dhikr." />
       <div className="preset-row">
         {all.map((item) => <button className={item.id === active.id ? "selected" : ""} onClick={() => { setActiveId(item.id); setCount(0); }} key={item.id}>{item.title}</button>)}
-        <button onClick={() => setCreating(true)}><Plus /> My Tasbeeh</button>
+        <button onClick={() => { setEditingId(null); setForm({ title: "", translation: "", target: 33, image: "" }); setCreating(true); }}><Plus /> My Tasbeeh</button>
       </div>
       {creating && <form className="custom-tasbeeh-form" onSubmit={create}>
-        <h3>Create My Tasbeeh</h3>
+        <h3>{editingId ? "Edit My Tasbeeh" : "Create My Tasbeeh"}</h3>
         <input required placeholder="Zikr title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <input placeholder="Translation" value={form.translation} onChange={(e) => setForm({ ...form, translation: e.target.value })} />
         <input required type="number" min="1" placeholder="Target count" value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} />
         <label>Background image <input type="file" accept="image/*" onChange={chooseImage} /></label>
-        <div><button type="button" onClick={() => setCreating(false)}>Cancel</button><button type="submit">Save Tasbeeh</button></div>
+        <div><button type="button" onClick={() => { setCreating(false); setEditingId(null); }}>Cancel</button><button type="submit">{editingId ? "Update Tasbeeh" : "Save Tasbeeh"}</button></div>
       </form>}
+      {active.id.startsWith("custom-") && <button className="edit-tasbeeh" onClick={() => { setEditingId(active.id); setForm({ title: active.title, translation: active.translation || "", target: active.target, image: active.image || "" }); setCreating(true); }}><Settings /> Edit this Tasbeeh</button>}
       <section className="tasbeeh-card" style={active.image ? { backgroundImage: `linear-gradient(rgba(255,255,255,.88),rgba(255,255,255,.88)),url(${active.image})`, backgroundSize: "cover" } : undefined}>
         <span className="arabic dhikr">{active.arabic}</span><p>{active.translation || active.title}</p>
         <button className="counter" onClick={tap}><span>{count}</span><small>of {active.target}</small></button>
@@ -1009,16 +1034,8 @@ function CollectionReader({ collection, close, user = null }) {
     setData(null);
     setTopic(null);
     setError("");
-    Promise.all([
-      getHadithCollection(collection.id),
-      getHadithCollection(collection.id.replace("eng-", "urd-")).catch(
-        () => null,
-      ),
-      getHadithCollection(collection.id.replace("eng-", "ara-")).catch(
-        () => null,
-      ),
-    ])
-      .then(([english, urdu, arabic]) => setData({ english, urdu, arabic }))
+    getHadithCollection(collection.id)
+      .then((english) => setData({ english, urdu: null, arabic: null }))
       .catch((e) => setError(e.message));
   }, [collection]);
   const english = data?.english?.hadiths || [];
@@ -1043,7 +1060,21 @@ function CollectionReader({ collection, close, user = null }) {
       urduTitle: urduSections[key] || englishSections[key] || `کتاب ${key}`,
     }));
   }, [english, data]);
-  if (!data)
+  const openTopic = async (entry) => {
+    setTopic({ book: entry.key, items: [], title: topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle, loading: true });
+    try {
+      const [englishSection, urduSection, arabicSection] = await Promise.all([
+        getHadithSection(collection.id, entry.key),
+        getHadithSection(collection.id.replace("eng-", "urd-"), entry.key).catch(() => null),
+        getHadithSection(collection.id.replace("eng-", "ara-"), entry.key).catch(() => null),
+      ]);
+      setData((current) => ({ ...current, urdu: urduSection, arabic: arabicSection }));
+      setTopic({ book: entry.key, items: englishSection?.hadiths || entry.items, title: topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle, loading: false });
+    } catch (reason) {
+      setError(reason.message);
+      setTopic({ book: entry.key, items: entry.items, title: entry.englishTitle, loading: false });
+    }
+  };  if (!data)
     return (
       <>
         <div className="reader-head">
@@ -1077,7 +1108,7 @@ function CollectionReader({ collection, close, user = null }) {
         <div className="topic-language"><button className={topicLanguage === "ur" ? "active" : ""} onClick={() => setTopicLanguage("ur")}>اردو</button><button className={topicLanguage === "en" ? "active" : ""} onClick={() => setTopicLanguage("en")}>English</button></div>
         <div className="topic-list">
           {topics.map((entry) => (
-            <button key={entry.key} onClick={() => setTopic({ book: entry.key, items: entry.items, title: topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle })}>
+            <button key={entry.key} onClick={() => openTopic(entry)}>
               <span>{entry.key}</span>
               <div>
                 <b dir={topicLanguage === "ur" ? "rtl" : "ltr"}>{topicLanguage === "ur" ? entry.urduTitle : entry.englishTitle}</b>
@@ -1106,6 +1137,7 @@ function CollectionReader({ collection, close, user = null }) {
           <option value="en">English</option>
         </select>
       </div>
+      {topic.loading && <Empty text="Loading this chapter in Arabic, Urdu and English…" />}
       <div className="hadith-feed">
         {topic.items.map((h) => {
           const key = String(h.hadithnumber),
@@ -1329,12 +1361,12 @@ function QuranExperience({ user }) {
     <>
       <div className="quran-modes quran-modes-scroll">{tabs.map(([id,label])=><button key={id} className={mode===id?"active":""} onClick={()=>setMode(id)}>{label}</button>)}</div>
       {mode === "alquran" && <><div className="reader-switch"><button className={reader === "juz" ? "active" : ""} onClick={() => setReader("juz")}>30 Juz / Para</button><button className={reader === "surah" ? "active" : ""} onClick={() => setReader("surah")}>114 Surahs</button><button className={reader === "favorites" ? "active" : ""} onClick={() => setReader("favorites")}>My Favorites</button></div>{reader === "juz" ? <JuzBrowser /> : reader === "favorites" ? <QuranFavorites user={user}/> : <QuranView user={user} />}</>}
-      {mode === "seerah" && <SeerahSeries />}
-      {mode === "15line" && <LineMushaf lines={15} />}
-      {mode === "16line" && <LineMushaf lines={16} />}
-      {mode === "recitation" && <RecitationLibrary />}
-      {mode === "subjects" && <QuranSubjects onOpenAyah={openAyah} />}
-      {mode === "fahm" && <FahmCourse onOpenAyah={openAyah} />}
+      {mode === "seerah" && <LazySection><SeerahSeries /></LazySection>}
+      {mode === "15line" && <LazySection><LineMushaf lines={15} /></LazySection>}
+      {mode === "16line" && <LazySection><LineMushaf lines={16} /></LazySection>}
+      {mode === "recitation" && <LazySection><RecitationLibrary /></LazySection>}
+      {mode === "subjects" && <LazySection><QuranSubjects onOpenAyah={openAyah} /></LazySection>}
+      {mode === "fahm" && <LazySection><FahmCourse onOpenAyah={openAyah} /></LazySection>}
     </>
   );
 }
@@ -1527,9 +1559,6 @@ function InstallGate({ prompt, close }) {
   return (
     <div className="install-gate">
       <section>
-        <button className="gate-close" onClick={close}>
-          <X />
-        </button>
         <img src="/icons/icon-192.png" alt="Sakinah app icon" />
         <span>SAKINAH ISLAMIC COMPANION</span>
         {installed ? (
@@ -1582,9 +1611,6 @@ function InstallGate({ prompt, close }) {
                 </p>
               </div>
             )}
-            <button className="continue-web" onClick={close}>
-              Continue in browser
-            </button>
           </>
         )}
       </section>
@@ -1699,13 +1725,12 @@ function App() {
   console.info("[Sakinah] display mode", { standalone: isStandalone, navigatorStandalone: window.navigator.standalone === true, source: params.get("source") });
   const [view, setView] = useState(params.get("view") || "home"),
     [dark, setDark] = useStored("dark-mode", params.get("theme") === "dark"),
-    [fiqh, setFiqh] = useStored("sakinah-fiqh", "hanafi"),
     [install, setInstall] = useState(null),
     [user, setUser] = useState(null),
     [authReady, setAuthReady] = useState(!supabase),
-    [profileReady, setProfileReady] = useState(!supabase),
     [authOpen, setAuthOpen] = useState(false),
     [authMode, setAuthMode] = useState("login"),
+    [sidebarOpen, setSidebarOpen] = useState(false),
     [updateAvailable, setUpdateAvailable] = useState(false),
     [showOnboarding, setShowOnboarding] = useState(
       () =>
@@ -1720,7 +1745,8 @@ function App() {
         sessionStorage.getItem("sakinah-install-dismissed") !== "1",
     );
   usePrayerScheduler();
-  const prayerData = useLivePrayerData(fiqh);
+  useDailyContentNotifications();
+  const prayerData = useLivePrayerData();
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
@@ -1748,32 +1774,6 @@ function App() {
     return () => window.removeEventListener("sakinah-signout", signOut);
   }, []);
   useEffect(() => {
-    if (!user || !supabase) { setProfileReady(true); return; }
-    let active = true;
-    setProfileReady(false);
-    supabase.from("profiles").select("preferences").eq("id", user.id).maybeSingle()
-      .then(({ data, error }) => {
-        if (!active) return;
-        if (error) console.error("[Sakinah Profile] load failed", error);
-        const savedFiqh = data?.preferences?.fiqh;
-        if (savedFiqh === "hanafi" || savedFiqh === "jafria") setFiqh(savedFiqh);
-        setProfileReady(true);
-      });
-    return () => { active = false; };
-  }, [user]);
-  useEffect(() => {
-    if (!user || !supabase || !profileReady) return;
-    supabase.from("profiles").select("preferences").eq("id", user.id).maybeSingle()
-      .then(({ data }) => supabase.from("profiles").upsert({
-        id: user.id,
-        email: user.email,
-        name: user.user_metadata?.name || "",
-        preferences: { ...(data?.preferences || {}), fiqh },
-        updated_at: new Date().toISOString(),
-      }))
-      .then(({ error } = {}) => { if (error) console.error("[Sakinah Profile] fiqh save failed", error); });
-  }, [user, fiqh, profileReady]);
-  useEffect(() => {
     const ready = () => setUpdateAvailable(true);
     window.addEventListener("sakinah-update-ready", ready);
     return () => window.removeEventListener("sakinah-update-ready", ready);
@@ -1800,6 +1800,7 @@ function App() {
     duas: "Duas",
     shahadat: "Shahadat",
     names: "99 Names",
+    waqf: "Rules of Stopping",
     more: "More",
   };
   const go = (v) => {
@@ -1813,14 +1814,8 @@ function App() {
       tasbeeh: <TasbeehView user={user} />,
       prayer: <PrayerView prayerData={prayerData} />,
       qibla: <QiblaView prayerData={prayerData} />,
-      library:
-        fiqh === "jafria" ? <JafriaCatalogue kind="Books" /> : <LibraryView />,
-      hadith:
-        fiqh === "jafria" ? (
-          <JafriaCatalogue kind="Hadith" />
-        ) : (
-          <HadithView user={user} />
-        ),
+      library: <LibraryView />,
+      hadith: <HadithView user={user} />,
       calendar: <CalendarView />,
       profile: <ProfileView user={user} openAuth={() => setAuthOpen(true)} />,
       ibadat: <IbadatView />,
@@ -1828,14 +1823,9 @@ function App() {
       duas: <DuasView />,
       shahadat: <ShahadatView />,
       names: <NamesView />,
+      waqf: <WaqfView />,
       more: (
-        <MoreView
-          user={user}
-          fiqh={fiqh}
-          setFiqh={setFiqh}
-          go={go}
-          openAuth={() => setAuthOpen(true)}
-        />
+        <MoreView go={go} />
       ),
     })[view] || <EnhancedHome go={go} user={user} />;
   return (
@@ -1881,7 +1871,7 @@ function App() {
           [BookOpen, "Quran", "quran"],
           [Heart, "Hadith", "hadith"],
           [Hand, "Ibadat", "ibadat"],
-          [Settings, "More", "more"],
+          [Plus, "More", "more"],
         ].map(([Icon, label, id]) => (
           <button
             key={id}
@@ -1893,6 +1883,7 @@ function App() {
           </button>
         ))}
       </nav>
+      <AppSidebar open={sidebarOpen} close={() => setSidebarOpen(false)} user={user} openAuth={() => { setSidebarOpen(false); setAuthOpen(true); }} dark={dark} setDark={setDark} go={go} />
       {updateAvailable && (
         <div className="update-banner">
           <div>
@@ -1927,8 +1918,7 @@ function App() {
       )}
       {authReady && isStandalone && showOnboarding && (
         <EnhancedOnboarding
-          onDone={(selectedFiqh) => {
-            setFiqh(selectedFiqh);
+          onDone={() => {
             localStorage.setItem("sakinah-onboarding-v2", "1");
             setShowOnboarding(false);
           }}

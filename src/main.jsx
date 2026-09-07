@@ -28,6 +28,8 @@ createRoot(document.getElementById("root")).render(
   <AppErrorBoundary><React.StrictMode><App /></React.StrictMode></AppErrorBoundary>,
 );
 
+document.addEventListener("contextmenu", (event) => event.preventDefault());
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {

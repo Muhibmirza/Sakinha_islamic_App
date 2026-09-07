@@ -48,20 +48,11 @@ const slides = [
     text: "Hadith, duas and worship guides in one peaceful place.",
     icon: Heart,
   },
-  {
-    title: "Choose your fiqh",
-    text: "Select Hanafi or Jafria; you can change this anytime.",
-    icon: Settings,
-    fiqh: true,
-  },
 ];
 
 export function EnhancedOnboarding({ onDone }) {
   const [splash, setSplash] = useState(true);
   const [step, setStep] = useState(0);
-  const [fiqh, setFiqh] = useState(
-    localStorage.getItem("sakinah-fiqh") || "hanafi",
-  );
   useEffect(() => {
     const timer = setTimeout(() => setSplash(false), 1900);
     return () => clearTimeout(timer);
@@ -90,31 +81,12 @@ export function EnhancedOnboarding({ onDone }) {
         <span>WELCOME TO SAKINAH</span>
         <h1>{slide.title}</h1>
         <p>{slide.text}</p>
-        {slide.fiqh && (
-          <div className="fiqh-choice">
-            <button
-              className={fiqh === "hanafi" ? "selected" : ""}
-              onClick={() => setFiqh("hanafi")}
-            >
-              <b>Hanafi</b>
-              <small>Sunni Hanafi school</small>
-            </button>
-            <button
-              className={fiqh === "jafria" ? "selected" : ""}
-              onClick={() => setFiqh("jafria")}
-            >
-              <b>Jafria</b>
-              <small>Shia Ithna-Ashari</small>
-            </button>
-          </div>
-        )}
         <button
           className="journey-next"
           onClick={() => {
             if (step < slides.length - 1) setStep(step + 1);
             else {
-              localStorage.setItem("sakinah-fiqh", fiqh);
-              onDone(fiqh);
+              onDone();
             }
           }}
         >
@@ -280,6 +252,17 @@ const flashes = [
     "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=65",
   ],
 ];
+const expandedGreetings = [
+  ["Jummah Mubarak","May your Friday be filled with mercy and accepted duas."],["Eid Mubarak","May Allah accept your worship and fill your home with joy."],["Ramadan Kareem","May this month bring forgiveness, guidance and peace."],["New Muslim","Welcome to Islam. May every step be filled with light."],["Get well soon","May Allah grant complete healing and lasting strength."],["For the departed","May Allah forgive them and grant them Jannat al-Firdaws."],["New baby","May Allah make this child righteous and a coolness to your eyes."],["New home","May this home be filled with barakah, gratitude and peace."],["Exam dua","May Allah increase you in beneficial knowledge and ease."],["Before travel","May Allah protect your journey and return you safely."],["Morning light","Begin with Bismillah and place your trust in Allah."],["Evening peace","End the day with gratitude and remembrance."],["Sabr","Allah is with those who remain patiently steadfast."],["Tawakkul","Trust Allah; He is sufficient for the one who relies upon Him."],["Shukr","If you are grateful, Allah will surely increase you."],["Kindness","A gentle word can be a form of charity."],["Parents","My Lord, have mercy upon them as they raised me when small."],["Marriage","May Allah unite your hearts in goodness and mercy."],["Friendship","May our companionship lead us closer to Allah."],["Dua accepted","Never lose hope in the mercy and response of Allah."],["Laylat al-Qadr","Seek the blessed night with prayer, Quran and forgiveness."],["Hajj Mabroor","May your pilgrimage be accepted and your sins forgiven."],["Umrah Mubarak","May every step and dua be accepted."],["Aqiqah","May Allah bless the child, family and community."],["Condolence","Indeed we belong to Allah and to Him we return."],["Forgiveness","The door of repentance remains open; return with hope."],["Quran reminder","The Quran is guidance, healing and mercy for believers."],["Salah reminder","Come to prayer; come to true success."],["Charity","Whatever good you spend, Allah knows it completely."],["Peace","Spread salam and let mercy grow between hearts."],["Hope","Do not despair of Allah's mercy."],["Gratitude","Alhamdulillah for blessings seen and unseen."],
+];
+const expandedImages = [
+ "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?auto=format&fit=crop&w=700&q=65",
+ "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=65",
+ "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=700&q=65",
+ "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=700&q=65",
+ "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=700&q=65",
+];
+expandedGreetings.forEach(([title,text],index)=>flashes.push([title,text,expandedImages[index%expandedImages.length]]));
 function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = text.split(/\s+/);
   let line = "";
@@ -677,73 +660,20 @@ export function IbadatView() {
     </>
   );
 }
-export function MoreView({ user, fiqh, setFiqh, go, openAuth }) {
-  return (
-    <>
-      <div className="upgrade-title">
-        <span>YOUR SAKINAH</span>
-        <h1>More & Settings</h1>
-      </div>
-      <article className="account-status">
-        <User />
-        <div>
-          <b>{user?.user_metadata?.name || "Guest mode"}</b>
-          <small>{user?.email || "Local data is not cloud synced"}</small>
-        </div>
-        {!user && (
-          <button onClick={openAuth}>
-            <LogIn /> Sign in
-          </button>
-        )}
-      </article>
-      <section className="settings-section">
-        <b>Fiqh preference</b>
-        <div className="fiqh-setting">
-          <button
-            className={fiqh === "hanafi" ? "active" : ""}
-            onClick={() => setFiqh("hanafi")}
-          >
-            Hanafi
-          </button>
-          <button
-            className={fiqh === "jafria" ? "active" : ""}
-            onClick={() => setFiqh("jafria")}
-          >
-            Jafria
-          </button>
-        </div>
-        <small>
-          Prayer calculation and recommended sources update instantly.
-        </small>
-      </section>
-      <div className="more-grid">
-        {[
-          [Sparkles, "99 Names", "names"],
-          [Compass, "Qibla", "qibla"],
-          [MoonStar, "Supplications", "duas"],
-          [Hand, "My Tasbeeh", "tasbeeh"],
-          [Library, "Books", "library"],
-          [Clock3, "Prayer settings", "prayer"],
-        ].map(([I, t, v]) => (
-          <button onClick={() => go(v)} key={t}>
-            <I />
-            <span>{t}</span>
-            <ChevronRight />
-          </button>
-        ))}
-      </div>
-      {user && (
-        <button
-          className="signout"
-          onClick={() => window.dispatchEvent(new Event("sakinah-signout"))}
-        >
-          Log out
-        </button>
-      )}
-    </>
-  );
+export function MoreView({ go }) {
+  const items = [
+    [Sparkles,"Flashes & Greetings","flashes"],[MoonStar,"Supplications (Duas)","duas"],[Clock3,"Salah Tracker","prayer"],
+    [Compass,"Qibla direction","qibla"],[Star,"99 Names of Allah","names"],[Heart,"Shahadat","shahadat"],
+    [BookOpen,"Rules of Stopping (Waqf)","waqf"],[Hand,"My Tasbeeh","tasbeeh"],[Library,"Islamic Books","library"],
+  ];
+  return <><div className="upgrade-title"><span>EXPLORE SAKINAH</span><h1>More</h1></div><div className="more-grid">{items.map(([Icon,title,view])=><button onClick={()=>go(view)} key={view}><Icon/><span>{title}</span><ChevronRight/></button>)}</div></>;
 }
-export function NamesView() {
+export function WaqfView() {
+  const rules=[
+    ["مـ","Compulsory stop","Stop here; continuing may alter the meaning."],["لا","Do not stop","Continue recitation unless breath requires a stop."],["ج","Permissible stop","Stopping or continuing are both allowed."],["قلى","Stopping preferred","A pause is preferable, though continuation is valid."],["صلى","Continuing preferred","Continue if possible; stopping remains permissible."],["∴ ∴","Paired stop","Stop at either one of the paired signs, not both."],["س","Brief pause","Pause momentarily without taking a breath."],["قف","Stop","A clear instruction recommending a stop."],
+  ];
+  return <><div className="upgrade-title"><span>QURAN RECITATION</span><h1>Rules of Stopping</h1></div><p className="library-intro">Common Waqf signs used to guide pauses and continuation while reciting the Quran.</p><div className="waqf-list">{rules.map(([sign,title,text])=><article key={sign}><b dir="rtl">{sign}</b><div><strong>{title}</strong><p>{text}</p></div></article>)}</div></>;
+}export function NamesView() {
   const [names, setNames] = useState(() => {
     try { return JSON.parse(localStorage.getItem("sakinah-asma-99")) || []; }
     catch { return []; }
@@ -783,105 +713,6 @@ export function NamesView() {
         ))}
       </div>
       {names.length > 0 && <p className="note">Verified count: {names.length} of 99</p>}
-    </>
-  );
-}
-export function JafriaCatalogue({ kind = "Hadith" }) {
-  const [books, setBooks] = useState([]);
-  const [selected, setSelected] = useState(null);
-  useEffect(() => {
-    fetch("https://www.thaqalayn-api.net/api/v2/allbooks", {
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((all) => {
-        const wanted = [
-          "Al-Kāfi",
-          "Man lā yaḥḍuruh al-Faqīh",
-          "Tahdhīb al-Aḥkām",
-          "Al-Istibṣār",
-        ];
-        const grouped = wanted
-          .map((name) => {
-            const volumes = all.filter(
-              (x) =>
-                x.BookName === name ||
-                x.BookName?.toLowerCase().includes(
-                  name.toLowerCase().split(" ")[0],
-                ),
-            );
-            return volumes.length
-              ? {
-                  name,
-                  author: volumes[0].author,
-                  description: volumes[0].bookDescription,
-                  volumes,
-                }
-              : null;
-          })
-          .filter(Boolean);
-        setBooks(grouped);
-      })
-      .catch(() => setBooks([]));
-  }, []);
-  if (selected)
-    return (
-      <>
-        <div className="reader-head">
-          <button onClick={() => setSelected(null)}>
-            <ChevronRight />
-          </button>
-          <div>
-            <h2>{selected.name}</h2>
-            <span>{selected.author}</span>
-          </div>
-        </div>
-        <p className="library-intro">{selected.description}</p>
-        <div className="topic-list">
-          {selected.volumes.map((v) => (
-            <button key={v.bookId}>
-              <span>{v.volume}</span>
-              <div>
-                <b>Volume {v.volume}</b>
-                <small>
-                  {v.idRangeMax.toLocaleString()} narrations · {v.translator}
-                </small>
-              </div>
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  return (
-    <>
-      <div className="upgrade-title">
-        <span>JAFRIA {kind.toUpperCase()} SOURCES</span>
-        <h1>Primary collections</h1>
-      </div>
-      {!books.length ? (
-        <div className="empty">Loading Jafria catalogue…</div>
-      ) : (
-        <div className="collection-list">
-          {books.map((b) => (
-            <button key={b.name} onClick={() => setSelected(b)}>
-              <span>
-                <ScrollText />
-              </span>
-              <div>
-                <b>{b.name}</b>
-                <small>
-                  {b.author} · {b.volumes.length} volumes
-                </small>
-              </div>
-              <ChevronRight />
-            </button>
-          ))}
-        </div>
-      )}
-      <p className="note">
-        Source catalogue: Thaqalayn API. Individual narration grading should be
-        checked with qualified scholarship.
-      </p>
     </>
   );
 }

@@ -11,15 +11,10 @@ export async function getSurah(number) {
   if (!r.ok) throw new Error("Could not load this Surah");
   return (await r.json()).data;
 }
-export async function getPrayerTimes(
-  latitude,
-  longitude,
-  date = new Date(),
-  fiqh = "hanafi",
-) {
+export async function getPrayerTimes(latitude, longitude, date = new Date()) {
   const stamp = `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
   const r = await fetch(
-    `https://api.aladhan.com/v1/timings/${stamp}?latitude=${latitude}&longitude=${longitude}&method=${fiqh === "jafria" ? 0 : 1}&school=${fiqh === "hanafi" ? 1 : 0}`,
+    `https://api.aladhan.com/v1/timings/${stamp}?latitude=${latitude}&longitude=${longitude}&method=2&school=0`,
     { cache: "no-store" },
   );
   if (!r.ok) throw new Error("Prayer service unavailable");
@@ -101,6 +96,7 @@ async function hadithFetch(path) {
   return r.json();
 }
 export const getHadithCollection = (id) => hadithFetch(id);
+export const getHadithSection = (id, section) => hadithFetch(`${id}/sections/${section}`);
 export async function getDailyHadith() {
   const day = Math.floor(new Date().setHours(0, 0, 0, 0) / 86400000);
   const book =

@@ -1,4 +1,4 @@
-const CACHE = "sakinah-v11";
+const CACHE = "sakinah-v12";
 const CORE = [
   "/",
   "/manifest.webmanifest",
@@ -65,4 +65,14 @@ self.addEventListener("fetch", (event) => {
         }),
     ),
   );
+});
+
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag !== "sakinah-daily") return;
+  event.waitUntil(self.registration.showNotification("Daily Sakinah", {
+    body: "Pause for a moment of Quran, remembrance and reflection.",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: `sakinah-periodic-${new Date().toISOString().slice(0, 10)}`,
+  }));
 });
